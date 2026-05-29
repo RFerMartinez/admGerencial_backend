@@ -1,36 +1,77 @@
 # src/api/routes/productoEndpoint.py
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
 from asyncpg import Connection
-from typing import Any
+from typing import List
 
 from core.session import get_db
-from schemas.productoSchema import ProductoCreate, ProductoUpdate
+from schemas.productoSchema import ProductoCreate, ProductoUpdate, ProductoResponse
 from services import productoServices
 
-router = APIRouter(prefix="/productos", tags=["Productos"])
+router = APIRouter(
+    prefix="/productos",
+    tags=["Productos"]
+    )
 
-@router.get("/", response_model=dict[str, Any])
-async def listar_productos(conn: Connection = Depends(get_db)):
-    data = await productoServices.get_all_productos(conn)
-    return {"status": "success", "data": data}
 
-@router.get("/{producto_id}", response_model=dict[str, Any])
-async def obtener_producto(producto_id: int, conn: Connection = Depends(get_db)):
-    data = await productoServices.get_producto_by_id(conn, producto_id)
-    return {"status": "success", "data": data}
+@router.get("/",
+            response_model=List[ProductoResponse],
+            status_code=status.HTTP_200_OK
+            )
+async def listar_productos(
+    conn: Connection = Depends(get_db)
+    ):
+    """Obtiene la lista completa de productos del inventario."""
+    return await productoServices.get_all_productos(conn)
 
-@router.post("/", response_model=dict[str, Any], status_code=201)
-async def crear_producto(producto: ProductoCreate, conn: Connection = Depends(get_db)):
-    data = await productoServices.create_producto(conn, producto)
-    return {"status": "success", "data": data}
 
-@router.put("/{producto_id}", response_model=dict[str, Any])
-async def actualizar_producto(producto_id: int, producto: ProductoUpdate, conn: Connection = Depends(get_db)):
-    data = await productoServices.update_producto(conn, producto_id, producto)
-    return {"status": "success", "data": data}
+@router.get("/{producto_id}",
+            response_model=ProductoResponse,
+            status_code=status.HTTP_200_OK
+            )
+async def obtener_producto(
+    producto_id: int,
+    conn: Connection = Depends(get_db)
+    ):
+    """Obtiene un producto específico por su ID."""
+    return await productoServices.get_producto_by_id(conn, producto_id)
 
-@router.delete("/{producto_id}", response_model=dict[str, Any])
-async def eliminar_producto(producto_id: int, conn: Connection = Depends(get_db)):
+
+@router.post("/",
+            response_model=ProductoResponse,
+            status_code=status.HTTP_201_CREATED
+            )
+async def crear_producto(
+    producto: ProductoCreate,
+    conn: Connection = Depends(get_db)
+    ):
+    """Crea un nuevo producto. La categoría ('tipo') debe existir previamente."""
+    return await productoServices.create_producto(conn, producto)
+
+
+@router.put("/{producto_id}",
+            response_model=ProductoResponse,
+            status_code=status.HTTP_200_OK
+            )
+async def actualizar_producto(
+    producto_id: int,
+    producto: ProductoUpdate,
+    conn: Connection = Depends(get_db)
+    ):
+    """Actualiza parcialmente los datos de un producto."""
+    return await productoServices.update_producto(conn, producto_id, producto)
+
+
+@router.delete("/{producto_id}",
+            status_code=status.HTTP_204_NO_CONTENT
+            )
+async def eliminar_producto(
+    producto_id: int,
+    conn: Connection = Depends(get_db)
+    ):
+    """
+    Elimina un producto por su ID. 
+    Fallará si el producto ya está asociado a alguna venta o compra.
+    """
     await productoServices.delete_producto(conn, producto_id)
-    return {"status": "success", "message": f"Producto {producto_id} eliminado exitosamente."}
+    return # El status 204 no requiere devolver un body
 

@@ -7,7 +7,6 @@ from contextlib import asynccontextmanager
 from core.config import settings
 from core.session import connect_to_db, close_db_connection
 
-from utils.exceptions import APIException
 
 from api.routes import productoEndpoint
 
@@ -28,16 +27,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-@app.exception_handler(APIException)
-async def api_exception_handler(request: Request, exc: APIException):
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "status": "error",
-            "message": exc.message
-        }
-    )
-
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -47,7 +36,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(productoEndpoint.router, prefix="/api/v1")
+app.include_router(productoEndpoint.router)
 
 if __name__ == "__main__":
     uvicorn.run(

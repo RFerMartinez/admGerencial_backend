@@ -11,7 +11,8 @@ from core.session import connect_to_db, close_db_connection
 from api.routes import (
     productoEndpoint,
     categoriaEndpoint,
-    cuentaEndpoint
+    cuentaEndpoint,
+    ventaEndpoint
     )
 
 # Lifespan para administrar la conexión asíncrona de base de datos
@@ -43,6 +44,7 @@ app.add_middleware(
 app.include_router(productoEndpoint.router)
 app.include_router(categoriaEndpoint.router)
 app.include_router(cuentaEndpoint.router)
+app.include_router(ventaEndpoint.router)
 
 if __name__ == "__main__":
     uvicorn.run(

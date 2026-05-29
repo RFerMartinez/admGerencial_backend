@@ -4,13 +4,30 @@ from asyncpg import Connection
 from typing import List
 
 from core.session import get_db
-from schemas.productoSchema import ProductoCreate, ProductoUpdate, ProductoResponse
+from schemas.productoSchema import ProductoCreate, ProductoUpdate, ProductoResponse, ProductoListResponse
 from services import productoServices
 
 router = APIRouter(
     prefix="/productos",
     tags=["Productos"]
     )
+
+
+@router.get("/",
+            response_model=ProductoListResponse,
+            status_code=status.HTTP_200_OK
+            )
+async def listar_productos(
+    conn: Connection = Depends(get_db)
+    ):
+    """Obtiene la lista completa de productos del inventario."""
+    productos = await productoServices.get_all_productos(conn)
+    
+    # Envolvemos la respuesta en el formato requerido
+    return {
+        "status": "success",
+        "data": productos
+    }
 
 
 @router.get("/",

@@ -1,6 +1,6 @@
 # src/schemas/productoSchema.py
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional
+from typing import Optional, List
 
 class ProductoBase(BaseModel):
     nombre: str = Field(..., min_length=2, max_length=150, description="Nombre del producto")
@@ -21,4 +21,14 @@ class ProductoResponse(ProductoBase):
     id: int
     
     model_config = ConfigDict(from_attributes=True)
+
+class ProductoResponse(ProductoBase):
+    id: int
+    
+    model_config = ConfigDict(from_attributes=True)
+
+# NUEVO: Esquema para el listado con formato success/data
+class ProductoListResponse(BaseModel):
+    status: str
+    data: List[ProductoResponse]
 

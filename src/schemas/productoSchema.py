@@ -1,12 +1,13 @@
 # src/schemas/productoSchema.py
 from pydantic import BaseModel, Field, ConfigDict
-from typing import Optional, List
+from typing import Optional
 
 class ProductoBase(BaseModel):
     nombre: str = Field(..., min_length=2, max_length=150, description="Nombre del producto")
-    tipo: str = Field(..., min_length=2, max_length=50, description="Categoría del producto (Debe existir en la tabla categorias)")
+    tipo: str = Field(..., min_length=2, max_length=50, description="Categoría o tipo (Debe existir en categorias)")
     precio: float = Field(..., ge=0, description="Precio de venta mayor o igual a 0")
-    stock: int = Field(0, ge=0, description="Cantidad disponible en inventario")
+    costo: float = Field(0.0, ge=0, description="Costo de adquisición mayor o igual a 0")
+    stock: int = Field(0, ge=0, description="Cantidad en inventario")
 
 class ProductoCreate(ProductoBase):
     pass
@@ -22,14 +23,3 @@ class ProductoResponse(ProductoBase):
     id: int
     
     model_config = ConfigDict(from_attributes=True)
-
-class ProductoResponse(ProductoBase):
-    id: int
-    
-    model_config = ConfigDict(from_attributes=True)
-
-# NUEVO: Esquema para el listado con formato success/data
-class ProductoListResponse(BaseModel):
-    status: str
-    data: List[ProductoResponse]
-

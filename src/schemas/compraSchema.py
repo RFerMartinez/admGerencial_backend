@@ -3,8 +3,9 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 from typing import List, Literal, Optional
 from datetime import date
 
-TipoComprobante = Literal["Factura A", "Factura B", "Factura C", "Ticket", "Pagaré"]
-MetodoPago = Literal["Efectivo", "Transferencia", "Tarjeta", "Cuenta Corriente"]
+# "Cuenta Corriente" se añade como tipo de comprobante para hacer match con el JSON del frontend
+TipoComprobante = Literal["Factura A", "Factura B", "Factura C", "Ticket", "Cuenta Corriente"]
+MetodoPago = Literal["Efectivo", "Transferencia", "Tarjeta"]
 
 class CompraDetalle(BaseModel):
     producto_id: int = Field(..., description="ID del producto comprado")
@@ -13,22 +14,22 @@ class CompraDetalle(BaseModel):
 
 class CompraCreate(BaseModel):
     fecha: date = Field(..., description="Fecha del comprobante")
-    tipo_comprobante: TipoComprobante = Field(..., description="Documento que respalda la compra")
+    tipo_comprobante: TipoComprobante = Field(..., description="Documento que respalda la compra o condición")
     total: float = Field(..., gt=0, description="Total facturado")
     detalles: List[CompraDetalle] = Field(..., min_length=1, description="Lista de productos comprados")
     
-    # Campos Condicionales (Opcionales por defecto)
+    # Campos Condicionales
     metodo_pago: Optional[MetodoPago] = Field(None, description="Requerido si es Factura")
     nro_comprobante: Optional[str] = Field(default="S/N", max_length=50, description="Requerido si es Factura")
-    cuenta_proveedor_id: Optional[int] = Field(None, description="Requerido si es Pagaré")
+    cuenta_proveedor_id: Optional[int] = Field(None, description="Requerido si es Cuenta Corriente")
 
     @model_validator(mode='after')
     def validar_campos_condicionales(self):
-        # Lógica si entra un Pagaré
-        if self.tipo_comprobante == "Pagaré":
+        # Lógica si entra por Cuenta Corriente
+        if self.tipo_comprobante == "Cuenta Corriente":
             if self.cuenta_proveedor_id is None:
-                raise ValueError("El campo 'cuenta_proveedor_id' es obligatorio cuando se compra con Pagaré.")
-            # Forzamos valores nulos/por defecto para limpiar el payload
+                raise ValueError("El campo 'cuenta_proveedor_id' es obligatorio cuando se compra en Cuenta Corriente.")
+            # Limpiamos los campos de factura por si el front mandó basura
             self.metodo_pago = None 
             self.nro_comprobante = "S/N"
             

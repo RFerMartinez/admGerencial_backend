@@ -16,26 +16,35 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
             if not prod:
                 raise NotFoundException(detail=f"El producto con ID {item.producto_id} no existe.")
 
-        # --- ENRUTAMIENTO CONTABLE INTELIGENTE ---
-        codigo_haber = None
+        # --- ENRUTAMIENTO CONTABLE (HABER) ---
+        cuenta_haber_id = None
         
         if compra_data.tipo_comprobante == "Cuenta Corriente":
-            codigo_haber = '210001' # Proveedores
+            # USAMOS DIRECTAMENTE EL ID DEL FRONTEND
+            cuenta_haber_id = compra_data.cuenta_proveedor_id
+            
+            # Verificamos por seguridad que el ID enviado realmente exista en la tabla cuentas
+            cuenta_existe = await conn.fetchval("SELECT id FROM cuentas WHERE id = $1;", cuenta_haber_id)
+            if not cuenta_existe:
+                raise NotFoundException(detail=f"La cuenta contable con ID {cuenta_haber_id} no existe en el plan de cuentas.")
         else:
+            # Si es factura pagada al contado, buscamos el ID de la caja o banco por su código
             if compra_data.metodo_pago == "Efectivo":
                 codigo_haber = '110001' # Caja
             elif compra_data.metodo_pago in ["Transferencia", "Tarjeta"]:
-                codigo_haber = '110003' # Banco Nación Cta.Cte.
-
-        codigo_mercaderias = '140002' # Cuenta del Debe (Siempre entra la mercadería)
-        
-        # Buscar IDs internos de las cuentas
-        cuentas_ids = {}
-        for cod in [codigo_haber, codigo_mercaderias]:
-            cuenta = await conn.fetchrow("SELECT id FROM cuentas WHERE codigo = $1;", cod)
+                codigo_haber = '110003' # Banco
+                
+            cuenta = await conn.fetchrow("SELECT id FROM cuentas WHERE codigo = $1;", codigo_haber)
             if not cuenta:
-                raise DatabaseException(detail=f"Falla contable: No se encontró la cuenta con código {cod}.")
-            cuentas_ids[cod] = cuenta['id']
+                raise DatabaseException(detail=f"Falla contable: No se encontró la cuenta con código {codigo_haber}.")
+            cuenta_haber_id = cuenta['id']
+
+        # --- ENRUTAMIENTO CONTABLE (DEBE) ---
+        # Cuenta Mercaderías (Siempre entra la mercadería)
+        cuenta_mercaderias = await conn.fetchrow("SELECT id FROM cuentas WHERE codigo = '140002';")
+        if not cuenta_mercaderias:
+            raise DatabaseException(detail="Falla contable: No se encontró la cuenta de Mercaderías (140002).")
+        cuenta_debe_id = cuenta_mercaderias['id']
 
         # --- PASO 1: ASIENTO CONTABLE (Cabecera) ---
         if compra_data.tipo_comprobante == "Cuenta Corriente":
@@ -47,8 +56,6 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
         asiento_id = await conn.fetchval(query_asiento, compra_data.fecha, descripcion_asiento)
 
         # --- PASO 2: REGISTRO OPERATIVO ---
-        # Recordatorio: Si decides agregar cuenta_proveedor_id a tu tabla compras_mercaderia, 
-        # debes añadir el campo en este INSERT.
         query_compra = """
             INSERT INTO compras_mercaderia (fecha, total, asiento_id, tipo_comprobante, nro_comprobante) 
             VALUES ($1, $2, $3, $4, $5) RETURNING id;
@@ -77,8 +84,8 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
 
         # --- PASO 4: PARTIDA DOBLE ---
         renglones_contables = [
-            (asiento_id, cuentas_ids[codigo_mercaderias], compra_data.total, 0.00), # Debe (Ingreso al stock)
-            (asiento_id, cuentas_ids[codigo_haber], 0.00, compra_data.total)      # Haber (Deuda o Salida de caja)
+            (asiento_id, cuenta_debe_id, compra_data.total, 0.00),  # Debe (Mercaderías)
+            (asiento_id, cuenta_haber_id, 0.00, compra_data.total)  # Haber (El ID que mandó el front, o Caja/Banco)
         ]
 
         await conn.executemany("""

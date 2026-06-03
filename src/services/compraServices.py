@@ -5,12 +5,9 @@ from schemas.compraSchema import CompraCreate
 from utils.exceptions import NotFoundException, DatabaseException
 
 async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
-    # Transacción ACID: O se completa todo, o se deshace todo automáticamente
     async with conn.transaction():
         
         # --- PREPARACIÓN Y VALIDACIÓN ---
-        
-        # 1. Validar que los productos enviados existan (Bloqueamos fila para evitar colisiones)
         for item in compra_data.detalles:
             prod = await conn.fetchrow("""
                 SELECT id FROM producto WHERE id = $1 FOR UPDATE;
@@ -19,12 +16,26 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
             if not prod:
                 raise NotFoundException(detail=f"El producto con ID {item.producto_id} no existe.")
 
-        # 2. Mapeo de Cuentas Contables (Buscar IDs por código)
-        codigo_pago = '1.1.1.01' if compra_data.metodo_pago.lower() == 'efectivo' else '1.1.1.02'
-        codigo_mercaderias = '1.1.5.01'
+        # --- ENRUTAMIENTO CONTABLE (Selección dinámica de la cuenta del Haber) ---
+        codigo_haber = None
         
+        if compra_data.tipo_comprobante == "Pagaré":
+            codigo_haber = '210003' # Obligaciones a Pagar
+        else:
+            # Si no es pagaré, evaluamos cómo se cancela la factura/ticket
+            if compra_data.metodo_pago == "Efectivo":
+                codigo_haber = '110001' # Caja
+            elif compra_data.metodo_pago in ["Transferencia", "Tarjeta"]:
+                codigo_haber = '110003' # Banco Nación Cta.Cte.
+            elif compra_data.metodo_pago == "Cuenta Corriente":
+                codigo_haber = '210001' # Proveedores (Fiado comercial)
+
+        # Cuenta del Debe (Siempre entra la mercadería)
+        codigo_mercaderias = '140002' 
+        
+        # Obtenemos los IDs internos de las cuentas en base a sus códigos
         cuentas_ids = {}
-        for cod in [codigo_pago, codigo_mercaderias]:
+        for cod in [codigo_haber, codigo_mercaderias]:
             cuenta = await conn.fetchrow("SELECT id FROM cuentas WHERE codigo = $1;", cod)
             if not cuenta:
                 raise DatabaseException(detail=f"Falla contable: No se encontró la cuenta con código {cod}.")
@@ -51,13 +62,11 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
 
         # --- PASO 3: DETALLES DE COMPRA Y ACTUALIZACIÓN (INVENTARIO/COSTO) ---
         for item in compra_data.detalles:
-            # A) Guardar renglón de compra
             await conn.execute("""
                 INSERT INTO compras_detalle (compra_id, producto_id, cantidad, costo_unitario) 
                 VALUES ($1, $2, $3, $4);
             """, compra_id, item.producto_id, item.cantidad, item.costo_unitario)
             
-            # B) Actualizar Stock e ingresar el nuevo Costo Unitario
             await conn.execute("""
                 UPDATE producto 
                 SET stock = stock + $1, costo = $2 
@@ -68,8 +77,8 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
         renglones_contables = [
             # 1. Ingreso de Activo al Inventario -> Mercaderías Sube (Debe)
             (asiento_id, cuentas_ids[codigo_mercaderias], compra_data.total, 0.00),
-            # 2. Salida de Dinero -> Caja o Banco Baja (Haber)
-            (asiento_id, cuentas_ids[codigo_pago], 0.00, compra_data.total)
+            # 2. Obligación Documentada / Salida de Dinero -> Cuenta seleccionada (Haber)
+            (asiento_id, cuentas_ids[codigo_haber], 0.00, compra_data.total)
         ]
 
         await conn.executemany("""

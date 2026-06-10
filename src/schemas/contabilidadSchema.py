@@ -18,3 +18,18 @@ class AsientoDiario(BaseModel):
     total_debe: float = Field(..., description="Suma total de la columna Debe del asiento")
     total_haber: float = Field(..., description="Suma total de la columna Haber del asiento")
 
+class MovimientoMayor(BaseModel):
+    fecha: Union[datetime, date] = Field(..., description="Fecha del asiento")
+    asiento_id: int = Field(..., description="ID del asiento asociado")
+    descripcion: str = Field(..., description="Glosa o concepto del movimiento")
+    debe: float = Field(..., description="Importe debitado")
+    haber: float = Field(..., description="Importe acreditado")
+    saldo_acumulado: float = Field(..., description="Saldo de corrida acumulado hasta este renglón")
+
+class CuentaLibroMayor(BaseModel):
+    cuenta_id: int = Field(..., description="ID interno de la cuenta")
+    cuenta_codigo: str = Field(..., description="Código de 6 dígitos de la cuenta")
+    cuenta_nombre: str = Field(..., description="Nombre descriptivo de la cuenta")
+    saldo_final: float = Field(..., description="Saldo neto final de la cuenta")
+    movimientos: List[MovimientoMayor] = Field(..., description="Listado cronológico de movimientos")
+

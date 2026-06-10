@@ -4,7 +4,7 @@ from asyncpg import Connection
 from typing import List
 
 from core.session import get_db
-from schemas.contabilidadSchema import AsientoDiario
+from schemas.contabilidadSchema import AsientoDiario, CuentaLibroMayor
 from services import contabilidadServices
 
 router = APIRouter(prefix="/contabilidad", tags=["Reportes Contables"])
@@ -23,4 +23,20 @@ async def consultar_libro_diario(conn: Connection = Depends(get_db)):
     para su renderización en el frontend.
     """
     return await contabilidadServices.obtener_libro_diario(conn)
+
+@router.get(
+        "/libro-mayor",
+        response_model=List[CuentaLibroMayor],
+        status_code=status.HTTP_200_OK
+        )
+async def consultar_libro_mayor(
+    conn: Connection = Depends(get_db)
+    ):
+    """
+    Obtiene los movimientos agrupados por cuenta contable con saldo corrido incremental.
+    
+    Este reporte lee en tiempo real el Libro Diario y estructura de forma ordenada
+    las tarjetas o sábanas de cada cuenta con sus acumulados históricos.
+    """
+    return await contabilidadServices.obtener_libro_mayor(conn)
 

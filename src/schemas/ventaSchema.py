@@ -5,7 +5,7 @@ from datetime import datetime
 from datetime import date as dt_date
 
 # Restringimos las opciones aceptadas por el validador
-TipoMetodoPago = Literal["efectivo", "transferencia"]
+TipoMetodoPago = Literal["Efectivo", "Transferencia"]
 
 class VentaItem(BaseModel):
     producto_id: int = Field(..., alias="id", description="ID del producto vendido")

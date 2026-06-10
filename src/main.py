@@ -15,7 +15,8 @@ from api.routes import (
     ventaEndpoint,
     compraEndpoint,
     contabilidadEndpoint,
-    proveedorEndpoint
+    proveedorEndpoint,
+    capitalEndpoint
     )
 
 # Lifespan para administrar la conexión asíncrona de base de datos
@@ -51,6 +52,7 @@ app.include_router(ventaEndpoint.router)
 app.include_router(compraEndpoint.router)
 app.include_router(contabilidadEndpoint.router)
 app.include_router(proveedorEndpoint.router)
+app.include_router(capitalEndpoint.router)
 
 if __name__ == "__main__":
     uvicorn.run(

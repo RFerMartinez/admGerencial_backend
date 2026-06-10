@@ -31,9 +31,9 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
         # 2. ENRUTAMIENTO CONTABLE DINÁMICO (6 DÍGITOS)
         # efectivo -> 110001 (Caja)
         # transferencia -> 110004 (Banco Nación Caja de Ahorro)
-        if venta_data.metodo_pago == "efectivo":
+        if venta_data.metodo_pago == "Efectivo":
             codigo_cobro = '110001'
-        elif venta_data.metodo_pago == "transferencia":
+        elif venta_data.metodo_pago == "Transferencia":
             codigo_cobro = '110004'
         else:
             raise BadRequestException(detail="Método de pago no soportado por el sistema.")

@@ -34,7 +34,7 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
         if venta_data.metodo_pago == "Efectivo":
             codigo_cobro = '110001'
         elif venta_data.metodo_pago == "Transferencia":
-            codigo_cobro = '110004'
+            codigo_cobro = '110003'
         else:
             raise BadRequestException(detail="Método de pago no soportado por el sistema.")
         

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { size: a4; margin: 15mm; }
+        body { font-family: Helvetica, sans-serif; font-size: 12px; color: #333; }
+        table.header { width: 100%; border: 1px solid #000; margin-bottom: 15px; }
+        table.header td { vertical-align: top; padding: 10px; }
+        .col-tipo { width: 40px; text-align: center; font-size: 28px; font-weight: bold; border-left: 1px solid #000; border-right: 1px solid #000; background-color: #eaeeee; }
+        table.info-cliente { width: 100%; border: 1px solid #000; padding: 10px; margin-bottom: 15px; }
+        table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        table.items th, table.items td { border: 1px solid #666; padding: 6px; }
+        table.items th { background-color: #eaeeee; text-align: left; }
+        table.totales { width: 40%; margin-left: 60%; }
+        table.totales td { padding: 4px; font-size: 13px; }
+        .right { text-align: right; }
+    </style>
+</head>
+<body>
+    <table class="header" cellpadding="0" cellspacing="0">
+        <tr>
+            <td width="45%">
+                <h2 style="margin:0;">KIOSCO S.A.</h2>
+                <p>Responsable Inscripto<br>P. R. Sáenz Peña - Chaco</p>
+            </td>
+            <td class="col-tipo">
+                {{ 'A' if venta.tipo_comprobante == 'Factura A' else 'B' }}
+            </td>
+            <td width="45%">
+                <h3 style="margin:0;">{{ venta.tipo_comprobante|upper }}</h3>
+                <p><strong>Nro:</strong> {{ venta.nro_comprobante }}<br>
+                   <strong>Fecha:</strong> {{ venta.fecha }}</p>
+            </td>
+        </tr>
+    </table>
+
+    <table class="info-cliente" cellpadding="0" cellspacing="0">
+        <tr>
+            <td>
+                {% if venta.cliente_nombre %}
+                    <strong>Señor/es:</strong> {{ venta.cliente_nombre }}<br>
+                    <strong>CUIT/DNI:</strong> {{ venta.cliente_identificacion }}<br>
+                    <strong>Condición de IVA:</strong> {{ venta.cliente_condicion_iva }}<br>
+                    {% if venta.cliente_domicilio %}<strong>Domicilio:</strong> {{ venta.cliente_domicilio }}<br>{% endif %}
+                {% else %}
+                    <strong>Señor/es:</strong> Consumidor Final<br>
+                    <strong>Condición de IVA:</strong> Consumidor Final<br>
+                {% endif %}
+                <strong>Forma de Pago:</strong> {{ venta.metodo_pago }}
+            </td>
+        </tr>
+    </table>
+
+    <table class="items" cellpadding="0" cellspacing="0">
+        <tr>
+            <th>Detalle Producto</th>
+            <th class="right">Cant.</th>
+            <th class="right">Precio Unit.</th>
+            <th class="right">Subtotal</th>
+        </tr>
+        {% for item in items %}
+        <tr>
+            <td>{{ item.nombre }}</td>
+            <td class="right">{{ item.cantidad }}</td>
+            <td class="right">${{ "{:,.2f}".format(item.precio_unitario / 1.21 if venta.tipo_comprobante == 'Factura A' else item.precio_unitario) }}</td>
+            <td class="right">${{ "{:,.2f}".format((item.cantidad * item.precio_unitario) / 1.21 if venta.tipo_comprobante == 'Factura A' else item.cantidad * item.precio_unitario) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <table class="totales" cellpadding="0" cellspacing="0">
+        {% if venta.tipo_comprobante == 'Factura A' and venta.subtotal_neto %}
+        <tr>
+            <td>Subtotal Neto Gravado:</td>
+            <td class="right"><strong>${{ "{:,.2f}".format(venta.subtotal_neto) }}</strong></td>
+        </tr>
+        <tr>
+            <td>IVA (21%):</td>
+            <td class="right"><strong>${{ "{:,.2f}".format(venta.iva_21) }}</strong></td>
+        </tr>
+        {% endif %}
+        <tr>
+            <td style="border-top: 2px solid #000; padding-top: 6px; font-size: 15px;">TOTAL:</td>
+            <td class="right" style="border-top: 2px solid #000; padding-top: 6px; font-size: 15px;"><strong>${{ "{:,.2f}".format(venta.total) }}</strong></td>
+        </tr>
+    </table>
+</body>
+</html>

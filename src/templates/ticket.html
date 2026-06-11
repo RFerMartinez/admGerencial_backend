@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { size: 80mm 200mm; margin: 4mm; }
+        body { font-family: "Courier New", Courier, monospace; font-size: 11px; color: #000; }
+        .center { text-align: center; }
+        .right { text-align: right; }
+        .linea { border-bottom: 1px dashed #000; padding-top: 5px; margin-bottom: 5px; }
+        table { width: 100%; border-collapse: collapse; }
+        td, th { padding: 2px 0; }
+    </style>
+</head>
+<body>
+    <div class="center">
+        <h3>** KIOSCO S.A. **</h3>
+        <p>P. R. Saenz Peña - Chaco</p>
+        <div class="linea"></div>
+        <p><strong>TICKET DE VENTA ORIGINAL</strong></p>
+    </div>
+    
+    <p>Nro Trans: {{ venta.id }}<br>
+       Fecha: {{ venta.fecha }}<br>
+       Pago: {{ venta.metodo_pago }}</p>
+       
+    <div class="linea"></div>
+    
+    <table>
+        <tr>
+            <th align="left">Desc.</th>
+            <th align="right">Cant.</th>
+            <th align="right">Total</th>
+        </tr>
+        {% for item in items %}
+        <tr>
+            <td align="left">{{ item.nombre }}</td>
+            <td align="right">{{ item.cantidad }}</td>
+            <td align="right">${{ "{:,.2f}".format(item.cantidad * item.precio_unitario) }}</td>
+        </tr>
+        {% endfor %}
+    </table>
+    
+    <div class="linea"></div>
+    
+    <table>
+        <tr>
+            <td align="right" style="font-size: 14px;"><strong>TOTAL: ${{ "{:,.2f}".format(venta.total) }}</strong></td>
+        </tr>
+    </table>
+    
+    <div class="center" style="margin-top: 15px;">
+        <p>Gracias por su compra!</p>
+    </div>
+</body>
+</html>

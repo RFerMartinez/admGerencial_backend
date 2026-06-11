@@ -1,5 +1,6 @@
 # src/services/ventaServices.py
 import asyncpg
+import random
 from asyncpg import Connection
 from schemas.ventaSchema import VentaCreate
 from utils.exceptions import BadRequestException, NotFoundException, DatabaseException
@@ -53,12 +54,57 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
 
         # --- PASO 1: ASIENTO CONTABLE (Cabecera) ---
         query_asiento = "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;"
-        descripcion_asiento = f"Venta Mostrador - {venta_data.metodo_pago.capitalize()}"
+        # Actualizamos la glosa para que refleje el tipo de comprobante emitido
+        descripcion_asiento = f"Venta s/ {venta_data.tipo_comprobante} - {venta_data.metodo_pago.capitalize()}"
         asiento_id = await conn.fetchval(query_asiento, venta_data.fecha.date(), descripcion_asiento)
 
         # --- PASO 2: REGISTRO OPERATIVO (Venta Cabecera) ---
-        query_venta = "INSERT INTO ventas (fecha, total, asiento_id) VALUES ($1, $2, $3) RETURNING id;"
-        venta_id = await conn.fetchval(query_venta, venta_data.fecha.date(), venta_data.total, asiento_id)
+        
+        # A. Extracción segura de datos del cliente
+        cliente_iva = cliente_id = cliente_nom = cliente_dom = None
+        if venta_data.cliente:
+            cliente_iva = venta_data.cliente.condicion_iva
+            cliente_id = venta_data.cliente.cuit or venta_data.cliente.identificacion 
+            cliente_nom = venta_data.cliente.razon_social
+            cliente_dom = venta_data.cliente.domicilio
+
+        # B. Extracción segura de desglose de impuestos
+        subtotal = iva = None
+        if venta_data.impuestos:
+            subtotal = venta_data.impuestos.subtotal_neto
+            iva = venta_data.impuestos.iva_21
+
+        # C. Generador de Nro de Comprobante
+        nro_comprobante = "S/N"
+        if venta_data.tipo_comprobante != "Ticket":
+            # Generamos un Nro simulado para facturas. Ej: 0001-84729
+            nro_comprobante = f"0001-{random.randint(10000, 99999)}"
+
+        # D. Inserción en la base de datos con los nuevos campos
+        query_venta = """
+            INSERT INTO ventas (
+                fecha, total, asiento_id, tipo_comprobante, nro_comprobante,
+                cliente_condicion_iva, cliente_identificacion, cliente_nombre, 
+                cliente_domicilio, subtotal_neto, iva_21
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+            ) RETURNING id;
+        """
+        
+        venta_id = await conn.fetchval(
+            query_venta, 
+            venta_data.fecha.date(), 
+            venta_data.total, 
+            asiento_id,
+            venta_data.tipo_comprobante,
+            nro_comprobante,
+            cliente_iva,
+            cliente_id,
+            cliente_nom,
+            cliente_dom,
+            subtotal,
+            iva
+        )
 
         # --- PASO 3: DETALLES DE VENTA Y DESCUENTO DE STOCK ---
         for item in venta_data.items:
@@ -92,6 +138,7 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
             "id": venta_id,
             "fecha": venta_data.fecha.date(),
             "total": venta_data.total,
-            "asiento_id": asiento_id
+            "asiento_id": asiento_id,
+            "tipo_comprobante": venta_data.tipo_comprobante,
+            "nro_comprobante": nro_comprobante
         }
-

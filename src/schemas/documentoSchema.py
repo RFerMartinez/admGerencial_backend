@@ -23,8 +23,10 @@ class DocumentoListResponse(BaseModel):
 # --- POST: Notas de Crédito / Débito ---
 class ItemAfectado(BaseModel):
     producto_id: int = Field(..., description="ID del producto afectado")
-    cantidad: int = Field(..., gt=0, description="Cantidad devuelta o recargada")
+    cantidad: int = Field(..., ge=0, description="Cantidad devuelta o recargada. 0 para ajustes financieros.")
     precio_unitario: float = Field(..., ge=0, description="Precio unitario o costo")
+    nuevo_costo: Optional[float] = Field(None, description="Solo viaja en Compras si cantidad == 0")
+    nuevo_precio: Optional[float] = Field(None, description="Solo viaja en Ventas si cantidad == 0")
 
 class NotaVentaCreate(BaseModel):
     comprobante_padre_id: int
@@ -48,19 +50,4 @@ class NotaResponse(BaseModel):
     mensaje: str
 
     model_config = ConfigDict(from_attributes=True)
-
-class ItemAfectado(BaseModel):
-    producto_id: int
-    cantidad: int = Field(..., ge=0) # Ahora permitimos 0[cite: 1]
-    precio_unitario: float 
-    nuevo_costo: Optional[float] = None # Solo viaja en Compras si cantidad == 0[cite: 1]
-    nuevo_precio: Optional[float] = None # Solo viaja en Ventas si cantidad == 0[cite: 1]
-
-class NotaPayload(BaseModel):
-    comprobante_padre_id: int
-    tipo_comprobante: str
-    nro_comprobante_recibido: Optional[str] = None
-    motivo: str
-    total_modificado: float
-    items_afectados: List[ItemAfectado]
 

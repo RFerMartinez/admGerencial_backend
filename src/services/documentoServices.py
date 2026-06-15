@@ -2,7 +2,7 @@
 import asyncpg
 import random
 from asyncpg import Connection
-from schemas.documentoSchema import NotaPayload, NotaVentaCreate, NotaCompraCreate
+from schemas.documentoSchema import NotaVentaCreate, NotaCompraCreate
 from utils.exceptions import NotFoundException, DatabaseException
 
 async def obtener_documentos(conn: Connection) -> list[dict]:

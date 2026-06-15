@@ -49,3 +49,18 @@ class NotaResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class ItemAfectado(BaseModel):
+    producto_id: int
+    cantidad: int = Field(..., ge=0) # Ahora permitimos 0[cite: 1]
+    precio_unitario: float 
+    nuevo_costo: Optional[float] = None # Solo viaja en Compras si cantidad == 0[cite: 1]
+    nuevo_precio: Optional[float] = None # Solo viaja en Ventas si cantidad == 0[cite: 1]
+
+class NotaPayload(BaseModel):
+    comprobante_padre_id: int
+    tipo_comprobante: str
+    nro_comprobante_recibido: Optional[str] = None
+    motivo: str
+    total_modificado: float
+    items_afectados: List[ItemAfectado]
+

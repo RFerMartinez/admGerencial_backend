@@ -17,10 +17,8 @@ class CompraCreate(BaseModel):
     total: float = Field(..., gt=0, description="Total facturado")
     detalles: List[CompraDetalle] = Field(..., min_length=1, description="Lista de productos comprados")
     
-    # Campos Condicionales
     metodo_pago: Optional[MetodoPago] = Field(None, description="Requerido si es Factura")
     nro_comprobante: Optional[str] = Field(default="S/N", max_length=50, description="Requerido si es Factura")
-    # Aclaramos que es el ID interno de la tabla cuentas
     cuenta_proveedor_id: Optional[int] = Field(None, description="ID de la cuenta contable (Requerido si es Cuenta Corriente)") 
 
     @model_validator(mode='after')
@@ -45,6 +43,8 @@ class CompraResponse(BaseModel):
     fecha: date
     total: float
     asiento_id: int
+    tipo_comprobante: str 
+    nro_comprobante: str
     mensaje: str = "Compra registrada y contabilizada exitosamente."
 
     model_config = ConfigDict(from_attributes=True)

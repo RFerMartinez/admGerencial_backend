@@ -63,7 +63,7 @@ async def obtener_libro_diario(conn: Connection) -> list[dict]:
 
 async def obtener_libro_mayor(conn: Connection) -> list[dict]:
     try:
-        # Consulta SQL base para extraer los renglones ordenados cronológicamente
+        # Consulta base para extraer los renglones ordenados cronológicamente
         query = """
             SELECT
                 c.id AS cuenta_id,
@@ -82,52 +82,77 @@ async def obtener_libro_mayor(conn: Connection) -> list[dict]:
         """
         
         records = await conn.fetch(query)
-        
         mayor_agrupado = {}
         
         for record in records:
             c_id = record['cuenta_id']
+            tipo_cuenta = record['cuenta_tipo']
             
-            # Inicializar la cuenta contable en el diccionario si es el primer renglón que aparece
+            # 1. Definición de la naturaleza de la cuenta según su tipo
+            # Activos y Egresos aumentan por el Debe (Naturaleza Deudora)
+            # Pasivos, Patrimonios e Ingresos aumentan por el Haber (Naturaleza Acreedora)
+            if tipo_cuenta in ["Activo", "Egreso"]:
+                naturaleza = "Deudora"
+            else:
+                naturaleza = "Acreedora"
+                
             if c_id not in mayor_agrupado:
                 mayor_agrupado[c_id] = {
                     "cuenta_id": c_id,
                     "cuenta_codigo": record['cuenta_codigo'],
                     "cuenta_nombre": record['cuenta_nombre'],
-                    "cuenta_tipo": record['cuenta_tipo'],
-                    "saldo_final": 0.0,
+                    "_naturaleza": naturaleza,
                     "movimientos": [],
-                    "_saldo_corrido": 0.0  # Variable temporal interna para el acumulador
+                    "_saldo_corrido": 0.0  # Acumulador temporal interno
                 }
                 
             account = mayor_agrupado[c_id]
             debe = float(record['debe'])
             haber = float(record['haber'])
             
-            # Cálculo del saldo acumulado respetando la naturaleza contable de la cuenta
-            # Activos y Egresos aumentan por el Debe, disminuyen por el Haber.
-            # Pasivos, Patrimonios e Ingresos aumentan por el Haber, disminuyen por el Debe.
-            if account["cuenta_tipo"] in ["Activo", "Egreso"]:
+            # 2. Cálculo del saldo parcial acumulado según la naturaleza
+            if account["_naturaleza"] == "Deudora":
                 account["_saldo_corrido"] += (debe - haber)
             else:
                 account["_saldo_corrido"] += (haber - debe)
                 
-            # Añadir la línea de movimiento estructurada
+            # Añadir la línea del movimiento con el formato 'saldo_parcial'
             account["movimientos"].append({
                 "fecha": record['fecha'],
                 "asiento_id": record['asiento_id'],
                 "descripcion": record['descripcion'],
                 "debe": debe,
                 "haber": haber,
-                "saldo_acumulado": account["_saldo_corrido"]
+                "saldo_parcial": account["_saldo_corrido"]
             })
             
-        # Limpieza de variables auxiliares y asignación del saldo final a la cabecera
         resultado_final = []
         for account in mayor_agrupado.values():
-            account["saldo_final"] = account["_saldo_corrido"]
+            saldo_acumulado = account["_saldo_corrido"]
+            naturaleza = account["_naturaleza"]
+            
+            # 3. Clasificación final del saldo analizando si es consistente o excepcional
+            if saldo_acumulado > 0:
+                tipo_saldo = "Deudor" if naturaleza == "Deudora" else "Acreedor"
+                valor_saldo = saldo_acumulado
+            elif saldo_acumulado < 0:
+                # Caso excepcional: Saldo negativo respecto a su naturaleza
+                tipo_saldo = "Acreedor" if naturaleza == "Deudora" else "Deudor"
+                valor_saldo = abs(saldo_acumulado)
+            else:
+                # Validación estricta de saldo cero
+                tipo_saldo = "Saldada"
+                valor_saldo = 0.0
+                
+            # Formatear la salida estructurada de acuerdo al nuevo esquema JSON
+            account["saldo_final"] = {
+                "tipo": tipo_saldo,
+                "valor": valor_saldo
+            }
+            
+            # Limpieza de metadatos privados auxiliares
             del account["_saldo_corrido"]
-            del account["cuenta_tipo"]  # Lo removemos para que coincida con el JSON del front
+            del account["_naturaleza"]
             resultado_final.append(account)
             
         return resultado_final

@@ -33,3 +33,10 @@ class CuentaLibroMayor(BaseModel):
     saldo_final: float = Field(..., description="Saldo neto final de la cuenta")
     movimientos: List[MovimientoMayor] = Field(..., description="Listado cronológico de movimientos")
 
+class CuentaLibroMayor(BaseModel):
+    cuenta_id: int = Field(..., description="ID interno de la cuenta")
+    cuenta_codigo: str = Field(..., description="Código de la cuenta")
+    cuenta_nombre: str = Field(..., description="Nombre descriptivo de la cuenta")
+    movimientos: List[MovimientoMayor] = Field(..., description="Listado cronológico de movimientos")
+    saldo_final: SaldoFinal = Field(..., description="Estructura detallada del saldo final de la cuenta")
+

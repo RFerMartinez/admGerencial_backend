@@ -123,7 +123,7 @@ async def obtener_libro_mayor(conn: Connection) -> list[dict]:
                 "descripcion": record['descripcion'],
                 "debe": debe,
                 "haber": haber,
-                "saldo_parcial": account["_saldo_corrido"]
+                "saldo_acumulado": account["_saldo_corrido"]
             })
             
         resultado_final = []

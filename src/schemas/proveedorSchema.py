@@ -20,6 +20,11 @@ class PagoProveedorCreate(BaseModel):
     metodo_pago: MetodoPago = Field(..., description="Medio por el cual se cancela la deuda")
     observaciones: Optional[str] = Field(None, description="Nota adicional para el asiento (Opcional)")
 
+    # Captura del recibo físico
+    tipo_comprobante: str = Field(..., description="Ej: 'Recibo X'")
+    nro_comprobante_recibido: str = Field(..., description="El número impreso en el papel")
+    comprobante_padre_id: Optional[int] = Field(default=None, description="Irá en null por defecto")
+
 class PagoProveedorResponse(BaseModel):
     asiento_id: int
     mensaje: str = "Pago registrado y contabilizado exitosamente."

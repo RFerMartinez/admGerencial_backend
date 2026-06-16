@@ -49,3 +49,32 @@ class CompraResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class CompraDetalle(BaseModel):
+    producto_id: int = Field(..., description="ID del producto comprado")
+    cantidad: int = Field(..., gt=0, description="Cantidad adquirida")
+    costo_unitario: float = Field(..., ge=0, description="Costo al que nos vendió el proveedor")
+
+class CompraCreate(BaseModel):
+    fecha: date = Field(..., description="Fecha del comprobante")
+    tipo_comprobante: str = Field(..., description="Documento que respalda la compra")
+    nro_comprobante: str = Field(..., max_length=50, description="Número del comprobante físico")
+    total: float = Field(..., gt=0, description="Total facturado")
+    detalles: List[CompraDetalle] = Field(..., min_length=1, description="Lista de productos comprados")
+    
+    metodo_pago: Optional[str] = Field(None, description="Método de pago (nulo si es a crédito)")
+    cuenta_proveedor_id: Optional[int] = Field(None, description="ID de la cuenta contable (Requerido si es a crédito)") 
+
+    @model_validator(mode='after')
+    def validar_campos_condicionales(self):
+        if self.cuenta_proveedor_id is not None:
+            # Compra a crédito: no hay flujo de fondos inmediato
+            self.metodo_pago = None 
+        else:
+            # Compra al contado
+            if self.metodo_pago is None:
+                raise ValueError("El campo 'metodo_pago' es obligatorio para compras al contado.")
+                
+        return self
+
+    model_config = ConfigDict(populate_by_name=True)
+

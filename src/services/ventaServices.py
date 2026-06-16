@@ -30,8 +30,6 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
             costo_total_venta += costo_unitario * item.cantidad
 
         # 2. ENRUTAMIENTO CONTABLE DINÁMICO (6 DÍGITOS)
-        # efectivo -> 110001 (Caja)
-        # transferencia -> 110004 (Banco Nación Caja de Ahorro)
         if venta_data.metodo_pago == "Efectivo":
             codigo_cobro = '110001'
         elif venta_data.metodo_pago == "Transferencia":
@@ -39,10 +37,6 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
         else:
             raise BadRequestException(detail="Método de pago no soportado por el sistema.")
         
-        # Códigos de cuentas actualizados según la nueva estructura de 6 dígitos:
-        # Ventas = '410001'
-        # Costo de Ventas (CMV) = '510007'
-        # Mercaderías = '140002'
         cuentas_necesarias = [codigo_cobro, '410001', '510007', '140002']
         cuentas_ids = {}
         
@@ -54,19 +48,17 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
 
         # --- PASO 1: ASIENTO CONTABLE (Cabecera) ---
         query_asiento = "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;"
-        # Actualizamos la glosa para que refleje el tipo de comprobante emitido
         descripcion_asiento = f"Venta s/ {venta_data.tipo_comprobante} - {venta_data.metodo_pago.capitalize()}"
         asiento_id = await conn.fetchval(query_asiento, venta_data.fecha.date(), descripcion_asiento)
 
-        # --- PASO 2: REGISTRO OPERATIVO (Venta Cabecera) ---
+        # --- PASO 2: REGISTRO OPERATIVO Y DOCUMENTAL ---
         
         # A. Extracción segura de datos del cliente
-        cliente_iva = cliente_id = cliente_nom = cliente_dom = None
+        cliente_iva = cliente_id = cliente_nom = None
         if venta_data.cliente:
             cliente_iva = venta_data.cliente.condicion_iva
             cliente_id = venta_data.cliente.cuit or venta_data.cliente.identificacion 
             cliente_nom = venta_data.cliente.razon_social
-            cliente_dom = venta_data.cliente.domicilio
 
         # B. Extracción segura de desglose de impuestos
         subtotal = iva = None
@@ -77,33 +69,42 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
         # C. Generador de Nro de Comprobante
         nro_comprobante = "S/N"
         if venta_data.tipo_comprobante != "Ticket":
-            # Generamos un Nro simulado para facturas. Ej: 0001-84729
             nro_comprobante = f"0001-{random.randint(10000, 99999)}"
 
-        # D. Inserción en la base de datos con los nuevos campos
+        # D. Inserción en la base de datos operativa (tabla ventas)
         query_venta = """
-            INSERT INTO ventas (
-                fecha, total, asiento_id, tipo_comprobante, nro_comprobante,
-                cliente_condicion_iva, cliente_identificacion, cliente_nombre, 
-                cliente_domicilio, subtotal_neto, iva_21
-            ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-            ) RETURNING id;
+            INSERT INTO ventas (fecha, total, asiento_id) 
+            VALUES ($1, $2, $3) RETURNING id;
         """
-        
         venta_id = await conn.fetchval(
             query_venta, 
             venta_data.fecha.date(), 
             venta_data.total, 
-            asiento_id,
+            asiento_id
+        )
+
+        # E. Inserción en la base de datos documental (tabla documentos_contables)
+        query_documento = """
+            INSERT INTO documentos_contables (
+                tipo_comprobante, nro_comprobante, fecha_emision, total,
+                cliente_proveedor_nombre, cliente_proveedor_identificacion, condicion_iva,
+                subtotal_neto, iva_21, venta_id
+            ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+            ) RETURNING id;
+        """
+        await conn.fetchval(
+            query_documento,
             venta_data.tipo_comprobante,
             nro_comprobante,
-            cliente_iva,
-            cliente_id,
+            venta_data.fecha.date(),
+            venta_data.total,
             cliente_nom,
-            cliente_dom,
+            cliente_id,
+            cliente_iva,
             subtotal,
-            iva
+            iva,
+            venta_id
         )
 
         # --- PASO 3: DETALLES DE VENTA Y DESCUENTO DE STOCK ---
@@ -117,15 +118,11 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
                 UPDATE producto SET stock = stock - $1 WHERE id = $2;
             """, item.cantidad, item.producto_id)
 
-        # --- PASO 4: PARTIDA DOBLE (Asientos Detalle con 6 dígitos) ---
+        # --- PASO 4: PARTIDA DOBLE ---
         renglones_contables = [
-            # 1. Ingreso de Dinero (Caja o Banco) -> Activo Sube (Debe)
             (asiento_id, cuentas_ids[codigo_cobro], venta_data.total, 0.00),
-            # 2. Ganancia por Venta -> Ingreso Sube (Haber)
             (asiento_id, cuentas_ids['410001'], 0.00, venta_data.total),
-            # 3. Costo de Ventas (CMV) -> Egreso Sube (Debe)
             (asiento_id, cuentas_ids['510007'], costo_total_venta, 0.00),
-            # 4. Salida de Mercadería -> Activo Baja (Haber)
             (asiento_id, cuentas_ids['140002'], 0.00, costo_total_venta)
         ]
 
@@ -142,3 +139,4 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
             "tipo_comprobante": venta_data.tipo_comprobante,
             "nro_comprobante": nro_comprobante
         }
+

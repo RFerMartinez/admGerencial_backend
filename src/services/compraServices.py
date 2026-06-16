@@ -20,15 +20,11 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
         cuenta_haber_id = None
         
         if compra_data.tipo_comprobante == "Cuenta Corriente":
-            # USAMOS DIRECTAMENTE EL ID DEL FRONTEND
             cuenta_haber_id = compra_data.cuenta_proveedor_id
-            
-            # Verificamos por seguridad que el ID enviado realmente exista en la tabla cuentas
             cuenta_existe = await conn.fetchval("SELECT id FROM cuentas WHERE id = $1;", cuenta_haber_id)
             if not cuenta_existe:
                 raise NotFoundException(detail=f"La cuenta contable con ID {cuenta_haber_id} no existe en el plan de cuentas.")
         else:
-            # Si es factura pagada al contado, buscamos el ID de la caja o banco por su código
             if compra_data.metodo_pago == "Efectivo":
                 codigo_haber = '110001' # Caja
             elif compra_data.metodo_pago in ["Transferencia", "Tarjeta"]:
@@ -40,7 +36,6 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
             cuenta_haber_id = cuenta['id']
 
         # --- ENRUTAMIENTO CONTABLE (DEBE) ---
-        # Cuenta Mercaderías (Siempre entra la mercadería)
         cuenta_mercaderias = await conn.fetchrow("SELECT id FROM cuentas WHERE codigo = '140002';")
         if not cuenta_mercaderias:
             raise DatabaseException(detail="Falla contable: No se encontró la cuenta de Mercaderías (140002).")
@@ -55,18 +50,34 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
         query_asiento = "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;"
         asiento_id = await conn.fetchval(query_asiento, compra_data.fecha, descripcion_asiento)
 
-        # --- PASO 2: REGISTRO OPERATIVO ---
+        # --- PASO 2: REGISTRO OPERATIVO Y DOCUMENTAL ---
+        
+        # A. Inserción en compras_mercaderia
         query_compra = """
-            INSERT INTO compras_mercaderia (fecha, total, asiento_id, tipo_comprobante, nro_comprobante) 
-            VALUES ($1, $2, $3, $4, $5) RETURNING id;
+            INSERT INTO compras_mercaderia (fecha, total, asiento_id) 
+            VALUES ($1, $2, $3) RETURNING id;
         """
         compra_id = await conn.fetchval(
             query_compra, 
             compra_data.fecha, 
             compra_data.total, 
-            asiento_id, 
-            compra_data.tipo_comprobante, 
-            compra_data.nro_comprobante
+            asiento_id
+        )
+
+        # B. Inserción en documentos_contables
+        nro_comp = compra_data.nro_comprobante if compra_data.nro_comprobante else "S/N"
+        query_documento = """
+            INSERT INTO documentos_contables (
+                tipo_comprobante, nro_comprobante, fecha_emision, total, compra_id
+            ) VALUES ($1, $2, $3, $4, $5) RETURNING id;
+        """
+        await conn.fetchval(
+            query_documento,
+            compra_data.tipo_comprobante,
+            nro_comp,
+            compra_data.fecha,
+            compra_data.total,
+            compra_id
         )
 
         # --- PASO 3: INVENTARIO Y COSTOS ---
@@ -84,8 +95,8 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
 
         # --- PASO 4: PARTIDA DOBLE ---
         renglones_contables = [
-            (asiento_id, cuenta_debe_id, compra_data.total, 0.00),  # Debe (Mercaderías)
-            (asiento_id, cuenta_haber_id, 0.00, compra_data.total)  # Haber (El ID que mandó el front, o Caja/Banco)
+            (asiento_id, cuenta_debe_id, compra_data.total, 0.00),
+            (asiento_id, cuenta_haber_id, 0.00, compra_data.total)
         ]
 
         await conn.executemany("""
@@ -97,6 +108,8 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
             "id": compra_id,
             "fecha": compra_data.fecha,
             "total": compra_data.total,
-            "asiento_id": asiento_id
+            "asiento_id": asiento_id,
+            "tipo_comprobante": compra_data.tipo_comprobante,
+            "nro_comprobante": nro_comp
         }
 

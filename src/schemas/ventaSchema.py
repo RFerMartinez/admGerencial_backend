@@ -7,10 +7,8 @@ from datetime import date as dt_date
 TipoMetodoPago = Literal["Efectivo", "Transferencia"]
 TipoComprobante = Literal["Ticket", "Factura B", "Factura A"]
 
-# --- Nuevos Submodelos ---
 class ClienteData(BaseModel):
     condicion_iva: Optional[str] = None
-    # Permitimos tanto "identificacion" como "cuit" dependiendo del frontend
     identificacion: Optional[str] = None
     cuit: Optional[str] = None
     razon_social: Optional[str] = None
@@ -28,7 +26,6 @@ class VentaItem(BaseModel):
 
     model_config = ConfigDict(populate_by_name=True)
 
-
 class VentaCreate(BaseModel):
     fecha: datetime = Field(..., description="Fecha y hora de la transacción")
     tipo_comprobante: TipoComprobante = Field(..., description="Tipo de comprobante emitido")
@@ -38,21 +35,19 @@ class VentaCreate(BaseModel):
     total: float = Field(..., gt=0, description="Monto final neto de la venta")
     items: List[VentaItem] = Field(..., min_length=1, description="Detalle de productos incluidos")
     
-    # Bloques condicionales opcionales
     cliente: Optional[ClienteData] = None
     impuestos: Optional[ImpuestosData] = None
 
     model_config = ConfigDict(populate_by_name=True)
-
 
 class VentaResponse(BaseModel):
     id: int
     fecha: dt_date
     total: float
     asiento_id: int
-    # Retornamos los nuevos campos al frontend
     tipo_comprobante: str 
     nro_comprobante: str
     mensaje: str = "Venta registrada y contabilizada exitosamente."
 
     model_config = ConfigDict(from_attributes=True)
+

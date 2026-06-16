@@ -1,6 +1,6 @@
 # src/schemas/contabilidadSchema.py
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Literal
 from datetime import datetime, date
 from typing import Union
 
@@ -32,4 +32,15 @@ class CuentaLibroMayor(BaseModel):
     cuenta_nombre: str = Field(..., description="Nombre descriptivo de la cuenta")
     saldo_final: float = Field(..., description="Saldo neto final de la cuenta")
     movimientos: List[MovimientoMayor] = Field(..., description="Listado cronológico de movimientos")
+
+class SaldoFinal(BaseModel):
+    tipo: Literal["Deudor", "Acreedor", "Saldada"] = Field(..., description="Clasificación contable del saldo")
+    valor: float = Field(..., description="Valor absoluto neto del saldo")
+
+class CuentaLibroMayor(BaseModel):
+    cuenta_id: int = Field(..., description="ID interno de la cuenta")
+    cuenta_codigo: str = Field(..., description="Código de la cuenta")
+    cuenta_nombre: str = Field(..., description="Nombre descriptivo de la cuenta")
+    movimientos: List[MovimientoMayor] = Field(..., description="Listado cronológico de movimientos")
+    saldo_final: SaldoFinal = Field(..., description="Estructura detallada del saldo final de la cuenta")
 

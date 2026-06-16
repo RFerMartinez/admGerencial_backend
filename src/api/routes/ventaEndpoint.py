@@ -12,14 +12,8 @@ router = APIRouter(prefix="/ventas", tags=["Operaciones - Ventas"])
 @router.post("/", response_model=VentaResponse, status_code=status.HTTP_201_CREATED)
 async def registrar_venta(venta_data: VentaCreate, conn: Connection = Depends(get_db)):
     """
-    Procesa una nueva venta de mostrador.
-    
-    Esta operación es transaccional (ACID). Automáticamente:
-    1. Verifica el stock.
-    2. Genera la cabecera del asiento contable.
-    3. Guarda la venta y sus detalles.
-    4. Descuenta el inventario.
-    5. Genera la partida doble (Caja, Ventas, CMV, Mercaderías).
+    Procesa una nueva venta de mostrador, registrando datos contables y 
+    derivando la información fiscal a la tabla de documentos_contables.
     """
     resultado = await ventaServices.procesar_venta(conn, venta_data)
     return resultado
@@ -28,17 +22,21 @@ async def registrar_venta(venta_data: VentaCreate, conn: Connection = Depends(ge
 async def imprimir_comprobante_venta(venta_id: int, conn: Connection = Depends(get_db)):
     """
     Busca los datos consolidados de una venta y devuelve el documento PDF 
-    correspondiente (Ticket, Factura A o B) según se guardó en la transacción.
+    correspondiente integrando la tabla documentos_contables.
     """
-    # 1. Recuperar cabecera operativa con los nuevos datos fiscales
+    # 1. Recuperar cabecera operativa y datos fiscales centralizados
     venta = await conn.fetchrow("""
         SELECT 
-            v.id, v.fecha, v.total, v.tipo_comprobante, v.nro_comprobante,
-            v.cliente_nombre, v.cliente_identificacion, v.cliente_condicion_iva,
-            v.subtotal_neto, v.iva_21,
+            v.id, v.fecha, v.total, 
+            dc.tipo_comprobante, dc.nro_comprobante,
+            dc.cliente_proveedor_nombre AS cliente_nombre, 
+            dc.cliente_proveedor_identificacion AS cliente_identificacion, 
+            dc.condicion_iva AS cliente_condicion_iva,
+            dc.subtotal_neto, dc.iva_21,
             a.descripcion as metodo_pago
         FROM ventas v
         JOIN asientos a ON v.asiento_id = a.id
+        JOIN documentos_contables dc ON v.id = dc.venta_id
         WHERE v.id = $1;
     """, venta_id)
     
@@ -55,10 +53,8 @@ async def imprimir_comprobante_venta(venta_id: int, conn: Connection = Depends(g
 
     # --- PARSEO DE DATOS (Solución al error Decimal vs Float) ---
     venta_dict = dict(venta)
-    # Limpiamos el texto del método de pago extraído de la descripción del asiento contable
     venta_dict["metodo_pago"] = "Efectivo" if "Efectivo" in venta_dict["metodo_pago"] else "Transferencia"
     
-    # Convertimos los valores Decimal de PostgreSQL a Float nativo de Python para que Jinja2 pueda operar
     if venta_dict["total"] is not None:
         venta_dict["total"] = float(venta_dict["total"])
     if venta_dict["subtotal_neto"] is not None:
@@ -70,7 +66,6 @@ async def imprimir_comprobante_venta(venta_id: int, conn: Connection = Depends(g
     for item in items:
         item_dict = dict(item)
         if item_dict["precio_unitario"] is not None:
-            # Convertimos el precio unitario a float
             item_dict["precio_unitario"] = float(item_dict["precio_unitario"])
         items_list.append(item_dict)
     # -------------------------------------------------------------
@@ -87,3 +82,4 @@ async def imprimir_comprobante_venta(venta_id: int, conn: Connection = Depends(g
             "Content-Disposition": f"inline; filename={nombre_archivo}"
         }
     )
+

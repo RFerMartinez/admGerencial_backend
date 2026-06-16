@@ -4,48 +4,93 @@
     <meta charset="UTF-8">
     <style>
         @page { size: a4; margin: 15mm; }
-        body { font-family: Helvetica, sans-serif; font-size: 12px; color: #333; }
-        table.header { width: 100%; border: 1px solid #000; margin-bottom: 15px; }
-        table.header td { vertical-align: top; padding: 10px; }
-        .col-tipo { width: 40px; text-align: center; font-size: 28px; font-weight: bold; border-left: 1px solid #000; border-right: 1px solid #000; background-color: #eaeeee; }
-        table.info-cliente { width: 100%; border: 1px solid #000; padding: 10px; margin-bottom: 15px; }
-        table.items { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        table.items th, table.items td { border: 1px solid #666; padding: 6px; }
-        table.items th { background-color: #eaeeee; text-align: left; }
-        table.totales { width: 40%; margin-left: 60%; }
-        table.totales td { padding: 4px; font-size: 13px; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 12px; color: #222; }
+        
+        /* Colores corporativos */
+        .color-primary { color: #2c3e50; }
+        .bg-light { background-color: #f4f6f7; }
+        
+        /* Cabecera */
+        table.header { width: 100%; border-bottom: 3px solid #2c3e50; padding-bottom: 15px; margin-bottom: 20px; }
+        table.header td { vertical-align: middle; }
+        .brand { font-size: 32px; font-weight: bold; margin: 0; letter-spacing: 1px; }
+        
+        /* Recuadro de Letra A/B */
+        table.doc-type { width: 60px; border: 3px solid #2c3e50; margin: 0 auto; }
+        table.doc-type td { text-align: center; padding: 10px 5px; font-size: 34px; font-weight: bold; background-color: #ecf0f1; color: #2c3e50; }
+        
+        /* Información del Comprobante */
+        .doc-info { text-align: right; }
+        .doc-title { font-size: 18px; font-weight: bold; text-transform: uppercase; margin: 0 0 5px 0; color: #2c3e50; }
+        
+        /* Caja de Cliente */
+        table.info-cliente { width: 100%; border: 1px solid #bdc3c7; background-color: #fcfcfc; margin-bottom: 20px; }
+        table.info-cliente td { padding: 12px; line-height: 1.5; }
+        
+        /* Tabla de Productos */
+        table.items { width: 100%; border-collapse: collapse; margin-bottom: 25px; }
+        table.items th { background-color: #2c3e50; color: #ffffff; padding: 8px; text-align: left; font-size: 11px; text-transform: uppercase; }
+        table.items td { border-bottom: 1px solid #ecf0f1; padding: 8px; }
+        .row-even { background-color: #f9fbfc; } /* Estilo cebra */
+        
+        /* Tabla de Totales */
+        table.totales { width: 45%; margin-left: 55%; border: 1px solid #bdc3c7; background-color: #fcfcfc; }
+        table.totales td { padding: 8px 12px; }
+        .total-final { font-size: 16px; font-weight: bold; color: #2c3e50; background-color: #ecf0f1; border-top: 2px solid #2c3e50; }
+        
         .right { text-align: right; }
+        .center { text-align: center; }
     </style>
 </head>
 <body>
+
     <table class="header" cellpadding="0" cellspacing="0">
         <tr>
-            <td width="45%">
-                <h2 style="margin:0;">KIOSCO S.A.</h2>
-                <p>Responsable Inscripto<br>P. R. Sáenz Peña - Chaco</p>
+            <td width="40%">
+                <h1 class="brand color-primary">KusKus</h1>
+                <p style="margin: 5px 0 0 0; color: #555;">
+                    <strong>Comercio Minorista</strong><br>
+                    Presidencia Roque Sáenz Peña, Chaco<br>
+                    Responsable Inscripto
+                </p>
             </td>
-            <td class="col-tipo">
-                {{ 'A' if venta.tipo_comprobante == 'Factura A' else 'B' }}
+            
+            <td width="20%">
+                <table class="doc-type" cellpadding="0" cellspacing="0">
+                    <tr>
+                        <td>{{ 'A' if venta.tipo_comprobante == 'Factura A' else 'B' }}</td>
+                    </tr>
+                </table>
             </td>
-            <td width="45%">
-                <h3 style="margin:0;">{{ venta.tipo_comprobante|upper }}</h3>
-                <p><strong>Nro:</strong> {{ venta.nro_comprobante }}<br>
-                   <strong>Fecha:</strong> {{ venta.fecha }}</p>
+            
+            <td width="40%" class="doc-info">
+                <h2 class="doc-title">{{ venta.tipo_comprobante }}</h2>
+                <p style="margin: 0; color: #444;">
+                    <strong>Nro:</strong> {{ venta.nro_comprobante }}<br>
+                    <strong>Fecha:</strong> {{ venta.fecha }}<br>
+                    <strong>Operación Interna:</strong> #{{ "{:06d}".format(venta.id) }}
+                </p>
             </td>
         </tr>
     </table>
 
     <table class="info-cliente" cellpadding="0" cellspacing="0">
         <tr>
-            <td>
+            <td width="50%">
                 {% if venta.cliente_nombre %}
                     <strong>Señor/es:</strong> {{ venta.cliente_nombre }}<br>
-                    <strong>CUIT/DNI:</strong> {{ venta.cliente_identificacion }}<br>
-                    <strong>Condición de IVA:</strong> {{ venta.cliente_condicion_iva }}<br>
-                    {% if venta.cliente_domicilio %}<strong>Domicilio:</strong> {{ venta.cliente_domicilio }}<br>{% endif %}
+                    <strong>Domicilio:</strong> {{ venta.cliente_domicilio if venta.cliente_domicilio else 'No especificado' }}
                 {% else %}
                     <strong>Señor/es:</strong> Consumidor Final<br>
-                    <strong>Condición de IVA:</strong> Consumidor Final<br>
+                    <strong>Domicilio:</strong> No especificado
+                {% endif %}
+            </td>
+            <td width="50%" valign="top">
+                {% if venta.cliente_nombre %}
+                    <strong>CUIT/DNI:</strong> {{ venta.cliente_identificacion }}<br>
+                    <strong>Condición IVA:</strong> {{ venta.cliente_condicion_iva }}<br>
+                {% else %}
+                    <strong>Condición IVA:</strong> Consumidor Final<br>
                 {% endif %}
                 <strong>Forma de Pago:</strong> {{ venta.metodo_pago }}
             </td>
@@ -54,15 +99,16 @@
 
     <table class="items" cellpadding="0" cellspacing="0">
         <tr>
-            <th>Detalle Producto</th>
-            <th class="right">Cant.</th>
-            <th class="right">Precio Unit.</th>
-            <th class="right">Subtotal</th>
+            <th width="45%">Detalle Producto</th>
+            <th class="center" width="15%">Cantidad</th>
+            <th class="right" width="20%">Precio Unit.</th>
+            <th class="right" width="20%">Subtotal</th>
         </tr>
+        
         {% for item in items %}
-        <tr>
+        <tr class="{{ loop.cycle('row-odd', 'row-even') }}">
             <td>{{ item.nombre }}</td>
-            <td class="right">{{ item.cantidad }}</td>
+            <td class="center">{{ item.cantidad }}</td>
             <td class="right">${{ "{:,.2f}".format(item.precio_unitario / 1.21 if venta.tipo_comprobante == 'Factura A' else item.precio_unitario) }}</td>
             <td class="right">${{ "{:,.2f}".format((item.cantidad * item.precio_unitario) / 1.21 if venta.tipo_comprobante == 'Factura A' else item.cantidad * item.precio_unitario) }}</td>
         </tr>
@@ -73,17 +119,18 @@
         {% if venta.tipo_comprobante == 'Factura A' and venta.subtotal_neto %}
         <tr>
             <td>Subtotal Neto Gravado:</td>
-            <td class="right"><strong>${{ "{:,.2f}".format(venta.subtotal_neto) }}</strong></td>
+            <td class="right">${{ "{:,.2f}".format(venta.subtotal_neto) }}</td>
         </tr>
         <tr>
             <td>IVA (21%):</td>
-            <td class="right"><strong>${{ "{:,.2f}".format(venta.iva_21) }}</strong></td>
+            <td class="right">${{ "{:,.2f}".format(venta.iva_21) }}</td>
         </tr>
         {% endif %}
         <tr>
-            <td style="border-top: 2px solid #000; padding-top: 6px; font-size: 15px;">TOTAL:</td>
-            <td class="right" style="border-top: 2px solid #000; padding-top: 6px; font-size: 15px;"><strong>${{ "{:,.2f}".format(venta.total) }}</strong></td>
+            <td class="total-final">TOTAL VENTA:</td>
+            <td class="right total-final">${{ "{:,.2f}".format(venta.total) }}</td>
         </tr>
     </table>
+
 </body>
 </html>

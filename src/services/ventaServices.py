@@ -4,6 +4,7 @@ import random
 from asyncpg import Connection
 from schemas.ventaSchema import VentaCreate
 from utils.exceptions import BadRequestException, NotFoundException, DatabaseException
+from services.clienteServices import obtener_o_crear_silencioso
 
 async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
     # Bloque Transaccional ACID
@@ -53,12 +54,27 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
 
         # --- PASO 2: REGISTRO OPERATIVO Y DOCUMENTAL ---
         
-        # A. Extracción segura de datos del cliente
-        cliente_iva = cliente_id = cliente_nom = None
-        if venta_data.cliente:
-            cliente_iva = venta_data.cliente.condicion_iva
-            cliente_id = venta_data.cliente.cuit or venta_data.cliente.identificacion 
-            cliente_nom = venta_data.cliente.razon_social
+        # A. Lógica Inteligente de Cliente y Upsert Silencioso
+        cuit_final = '00000000000'
+        cliente_nom = 'Consumidor Final'
+        cliente_iva = 'Consumidor Final'
+        cliente_domicilio = ''
+
+        # Si NO es Factura B y enviaron datos de cliente, usamos esos datos
+        if venta_data.tipo_comprobante != "Factura B" and venta_data.cliente:
+            cuit_final = venta_data.cliente.cuit or venta_data.cliente.identificacion or cuit_final
+            cliente_nom = venta_data.cliente.razon_social or cliente_nom
+            cliente_iva = venta_data.cliente.condicion_iva or cliente_iva
+            cliente_domicilio = venta_data.cliente.domicilio or cliente_domicilio
+
+        # Aseguramos que el cliente exista en la nueva tabla (Upsert)
+        await obtener_o_crear_silencioso(
+            conn, 
+            cuit=cuit_final, 
+            razon_social=cliente_nom, 
+            domicilio=cliente_domicilio, 
+            condicion_iva=cliente_iva
+        )
 
         # B. Extracción segura de desglose de impuestos
         subtotal = iva = None
@@ -88,9 +104,9 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
             INSERT INTO documentos_contables (
                 tipo_comprobante, nro_comprobante, fecha_emision, total,
                 cliente_proveedor_nombre, cliente_proveedor_identificacion, condicion_iva,
-                subtotal_neto, iva_21, venta_id
+                subtotal_neto, iva_21, venta_id, cliente_cuit
             ) VALUES (
-                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
             ) RETURNING id;
         """
         await conn.fetchval(
@@ -100,11 +116,12 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
             venta_data.fecha.date(),
             venta_data.total,
             cliente_nom,
-            cliente_id,
+            cuit_final,  # Usamos cuit_final también en cliente_proveedor_identificacion para retrocompatibilidad
             cliente_iva,
             subtotal,
             iva,
-            venta_id
+            venta_id,
+            cuit_final   # $11: Foreign Key a la tabla clientes
         )
 
         # --- PASO 3: DETALLES DE VENTA Y DESCUENTO DE STOCK ---
@@ -139,4 +156,3 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
             "tipo_comprobante": venta_data.tipo_comprobante,
             "nro_comprobante": nro_comprobante
         }
-

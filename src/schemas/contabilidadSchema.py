@@ -1,6 +1,6 @@
 # src/schemas/contabilidadSchema.py
 from pydantic import BaseModel, Field
-from typing import List, Literal, Union
+from typing import List, Literal, Union, Optional
 from datetime import datetime, date
 
 class DetalleAsiento(BaseModel):
@@ -46,3 +46,10 @@ class AsientoManualCreate(BaseModel):
     fecha: date = Field(..., description="Fecha del asiento")
     descripcion: str = Field(..., min_length=3, description="Concepto del asiento manual")
     detalles: List[AsientoManualDetalle] = Field(..., description="Renglones del asiento")
+    
+    # --- CAMPOS TOLERANTES PARA EL FRONTEND ---
+    # Permitimos que el front envíe estos datos sin que FastAPI arroje error 422.
+    # El servicio los ignorará al hacer el INSERT.
+    total: Optional[float] = None
+    total_debe: Optional[float] = None
+    total_haber: Optional[float] = None

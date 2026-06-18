@@ -4,7 +4,7 @@ from asyncpg import Connection
 from typing import List
 
 from core.session import get_db
-from schemas.contabilidadSchema import AsientoDiario, CuentaLibroMayor
+from schemas.contabilidadSchema import AsientoDiario, CuentaLibroMayor, AsientoManualCreate
 from services import contabilidadServices
 
 router = APIRouter(prefix="/contabilidad", tags=["Reportes Contables"])
@@ -40,3 +40,15 @@ async def consultar_libro_mayor(
     """
     return await contabilidadServices.obtener_libro_mayor(conn)
 
+@router.post(
+    "/asientos-manuales", 
+    status_code=status.HTTP_201_CREATED
+)
+async def registrar_asiento_manual(
+    asiento_data: AsientoManualCreate,
+    conn: Connection = Depends(get_db)
+):
+    """
+    Registra un asiento contable de forma manual asegurando el principio de Partida Doble.
+    """
+    return await contabilidadServices.registrar_asiento_manual(conn, asiento_data)

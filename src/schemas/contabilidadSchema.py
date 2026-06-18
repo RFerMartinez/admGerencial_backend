@@ -1,8 +1,7 @@
 # src/schemas/contabilidadSchema.py
 from pydantic import BaseModel, Field
-from typing import List, Literal
+from typing import List, Literal, Union
 from datetime import datetime, date
-from typing import Union
 
 class DetalleAsiento(BaseModel):
     cuenta_codigo: str = Field(..., description="Código jerárquico de la cuenta")
@@ -26,13 +25,6 @@ class MovimientoMayor(BaseModel):
     haber: float = Field(..., description="Importe acreditado")
     saldo_acumulado: float = Field(..., description="Saldo de corrida acumulado hasta este renglón")
 
-class CuentaLibroMayor(BaseModel):
-    cuenta_id: int = Field(..., description="ID interno de la cuenta")
-    cuenta_codigo: str = Field(..., description="Código de 6 dígitos de la cuenta")
-    cuenta_nombre: str = Field(..., description="Nombre descriptivo de la cuenta")
-    saldo_final: float = Field(..., description="Saldo neto final de la cuenta")
-    movimientos: List[MovimientoMayor] = Field(..., description="Listado cronológico de movimientos")
-
 class SaldoFinal(BaseModel):
     tipo: Literal["Deudor", "Acreedor", "Saldada"] = Field(..., description="Clasificación contable del saldo")
     valor: float = Field(..., description="Valor absoluto neto del saldo")
@@ -44,3 +36,13 @@ class CuentaLibroMayor(BaseModel):
     movimientos: List[MovimientoMayor] = Field(..., description="Listado cronológico de movimientos")
     saldo_final: SaldoFinal = Field(..., description="Estructura detallada del saldo final de la cuenta")
 
+# --- NUEVOS ESQUEMAS PARA ASIENTOS MANUALES ---
+class AsientoManualDetalle(BaseModel):
+    cuenta_id: int = Field(..., description="ID de la cuenta contable")
+    debe: float = Field(0.0, ge=0, description="Monto al Debe")
+    haber: float = Field(0.0, ge=0, description="Monto al Haber")
+
+class AsientoManualCreate(BaseModel):
+    fecha: date = Field(..., description="Fecha del asiento")
+    descripcion: str = Field(..., min_length=3, description="Concepto del asiento manual")
+    detalles: List[AsientoManualDetalle] = Field(..., description="Renglones del asiento")

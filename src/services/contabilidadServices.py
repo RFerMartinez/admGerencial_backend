@@ -2,6 +2,7 @@
 import asyncpg
 from asyncpg import Connection
 from utils.exceptions import DatabaseException
+from schemas.contabilidadSchema import AsientoManualCreate
 
 async def obtener_libro_diario(conn: Connection) -> list[dict]:
     try:
@@ -160,3 +161,52 @@ async def obtener_libro_mayor(conn: Connection) -> list[dict]:
     except Exception as e:
         raise DatabaseException(f"Error al procesar el reporte del Libro Mayor: {str(e)}")
 
+async def registrar_asiento_manual(conn: Connection, asiento_data: AsientoManualCreate) -> dict:
+    """
+    Registra un asiento contable validando rigurosamente los principios de Partida Doble.
+    """
+    # 1. Validación de Longitud Mínima
+    if len(asiento_data.detalles) < 2:
+        raise DatabaseException("El asiento manual requiere un mínimo de 2 cuentas para aplicar la partida doble.")
+
+    # 2. Sumarización y Redondeo
+    total_debe = round(sum(detalle.debe for detalle in asiento_data.detalles), 2)
+    total_haber = round(sum(detalle.haber for detalle in asiento_data.detalles), 2)
+
+    # 3. Validación de Valores
+    if total_debe <= 0:
+        raise DatabaseException("El total del asiento debe ser mayor a 0.")
+
+    # 4. Validación de Partida Doble
+    if total_debe != total_haber:
+        raise DatabaseException(f"Error de Partida Doble: El Debe ({total_debe}) no coincide con el Haber ({total_haber}).")
+
+    try:
+        # Bloque Transaccional ACID
+        async with conn.transaction():
+            # A. Inserción de la Cabecera
+            query_asiento = """
+                INSERT INTO asientos (fecha, descripcion)
+                VALUES ($1, $2) RETURNING id;
+            """
+            asiento_id = await conn.fetchval(query_asiento, asiento_data.fecha, asiento_data.descripcion)
+
+            # B. Inserción de los Detalles
+            renglones_contables = [
+                (asiento_id, detalle.cuenta_id, detalle.debe, detalle.haber)
+                for detalle in asiento_data.detalles
+            ]
+            
+            query_detalle = """
+                INSERT INTO asientos_detalle (asiento_id, cuenta_id, debe, haber)
+                VALUES ($1, $2, $3, $4);
+            """
+            await conn.executemany(query_detalle, renglones_contables)
+
+        return {
+            "mensaje": "Asiento registrado con éxito",
+            "asiento_id": asiento_id
+        }
+
+    except Exception as e:
+        raise DatabaseException(f"Fallo al registrar el asiento manual: {str(e)}")

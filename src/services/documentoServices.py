@@ -1,32 +1,39 @@
 # src/services/documentoServices.py
-import asyncpg
 import random
 from asyncpg import Connection
 from schemas.documentoSchema import NotaVentaCreate, NotaCompraCreate
 from utils.exceptions import NotFoundException, DatabaseException
+from services.cuentaSistemaServices import resolver_cuentas_sistema
 
 async def obtener_documentos(conn: Connection) -> list[dict]:
     query = """
-        SELECT 
+        SELECT
             dc.id,
-            CASE 
-                WHEN dc.venta_id IS NOT NULL THEN 'Venta'
-                WHEN dc.compra_id IS NOT NULL THEN 'Compra'
-                ELSE 'Ajuste/Nota' 
-            END as tipo_operacion,
+            COALESCE(dc.tipo_operacion,
+                CASE
+                    WHEN dc.venta_id IS NOT NULL THEN 'Venta'
+                    WHEN dc.compra_id IS NOT NULL THEN 'Compra'
+                    WHEN dc.gasto_id IS NOT NULL THEN 'Gasto'
+                    ELSE 'Ajuste/Nota'
+                END
+            ) as tipo_operacion,
             dc.fecha_emision,
             dc.tipo_comprobante,
             dc.nro_comprobante,
-            COALESCE(dc.cliente_proveedor_nombre, 'Consumidor Final') as entidad_nombre,
+            COALESCE(dc.entidad_nombre, dc.cliente_proveedor_nombre, 'Consumidor Final') as entidad_nombre,
             dc.total,
             p.id as producto_id,
             p.nombre as producto_nombre,
             COALESCE(vd.cantidad, cd.cantidad) as cantidad,
-            COALESCE(vd.precio_unitario, cd.costo_unitario) as precio_unitario
+            COALESCE(vd.precio_unitario, cd.costo_unitario) as precio_unitario,
+            g.descripcion as gasto_descripcion,
+            cg.nombre as gasto_cuenta_nombre
         FROM documentos_contables dc
         LEFT JOIN ventas_detalle vd ON dc.venta_id = vd.venta_id
         LEFT JOIN compras_detalle cd ON dc.compra_id = cd.compra_id
         LEFT JOIN producto p ON p.id = vd.producto_id OR p.id = cd.producto_id
+        LEFT JOIN gastos g ON dc.gasto_id = g.id
+        LEFT JOIN cuentas cg ON g.cuenta_debe_id = cg.id
         ORDER BY dc.fecha_emision DESC, dc.id DESC;
     """
     records = await conn.fetch(query)
@@ -36,7 +43,7 @@ async def obtener_documentos(conn: Connection) -> list[dict]:
     for row in records:
         doc_id = row['id']
         if doc_id not in documentos_agrupados:
-            documentos_agrupados[doc_id] = {
+            doc = {
                 "id": doc_id,
                 "tipo_operacion": row['tipo_operacion'],
                 "fecha_emision": row['fecha_emision'],
@@ -46,7 +53,11 @@ async def obtener_documentos(conn: Connection) -> list[dict]:
                 "total": float(row['total']),
                 "items_originales": []
             }
-            
+            if row['gasto_descripcion']:
+                doc["gasto_descripcion"] = row['gasto_descripcion']
+                doc["gasto_cuenta_nombre"] = row['gasto_cuenta_nombre']
+            documentos_agrupados[doc_id] = doc
+
         if row['producto_id'] is not None:
             documentos_agrupados[doc_id]["items_originales"].append({
                 "producto_id": row['producto_id'],
@@ -101,20 +112,21 @@ async def procesar_nota_venta(conn: Connection, nota_data: NotaVentaCreate) -> d
                 await conn.execute("UPDATE producto SET precio = $1 WHERE id = $2", item.nuevo_precio, item.producto_id)
 
         # 4. Contabilidad Automatizada
+        cs = await resolver_cuentas_sistema(conn, ['CAJA', 'BANCO', 'VENTAS', 'MERCADERIAS', 'CMV'])
+
         cuenta_cobro_id = None
         if padre['asiento_id']:
             cuenta_cobro_id = await conn.fetchval("""
                 SELECT ad.cuenta_id FROM asientos_detalle ad
-                JOIN cuentas c ON ad.cuenta_id = c.id
-                WHERE ad.asiento_id = $1 AND c.codigo IN ('110001', '110003') LIMIT 1
-            """, padre['asiento_id'])
-            
-        if not cuenta_cobro_id:
-            cuenta_cobro_id = await conn.fetchval("SELECT id FROM cuentas WHERE codigo = '110001'")
+                WHERE ad.asiento_id = $1 AND ad.cuenta_id IN ($2, $3) LIMIT 1
+            """, padre['asiento_id'], cs['CAJA'], cs['BANCO'])
 
-        c_ventas = await conn.fetchval("SELECT id FROM cuentas WHERE codigo = '410001'")
-        c_merca = await conn.fetchval("SELECT id FROM cuentas WHERE codigo = '140002'")
-        c_cmv = await conn.fetchval("SELECT id FROM cuentas WHERE codigo = '510007'")
+        if not cuenta_cobro_id:
+            cuenta_cobro_id = cs['CAJA']
+
+        c_ventas = cs['VENTAS']
+        c_merca = cs['MERCADERIAS']
+        c_cmv = cs['CMV']
 
         asiento_id = await conn.fetchval(
             "INSERT INTO asientos (fecha, descripcion) VALUES (CURRENT_DATE, $1) RETURNING id;",
@@ -189,18 +201,20 @@ async def procesar_nota_compra(conn: Connection, nota_data: NotaCompraCreate) ->
                 await conn.execute("UPDATE producto SET costo = $1 WHERE id = $2", item.nuevo_costo, item.producto_id)
 
         # 4. Contabilidad Automatizada
+        cs = await resolver_cuentas_sistema(conn, ['CAJA', 'BANCO', 'MERCADERIAS'])
+
         cuenta_pago_id = None
         if padre['asiento_id']:
             cuenta_pago_id = await conn.fetchval("""
                 SELECT ad.cuenta_id FROM asientos_detalle ad
-                JOIN cuentas c ON ad.cuenta_id = c.id
-                WHERE ad.asiento_id = $1 AND (c.tipo = 'Pasivo' OR c.codigo IN ('110001', '110003')) LIMIT 1
-            """, padre['asiento_id'])
-            
-        if not cuenta_pago_id:
-            cuenta_pago_id = await conn.fetchval("SELECT id FROM cuentas WHERE codigo = '110001'")
+                LEFT JOIN cuentas c ON ad.cuenta_id = c.id
+                WHERE ad.asiento_id = $1 AND (c.tipo = 'Pasivo' OR ad.cuenta_id IN ($2, $3)) LIMIT 1
+            """, padre['asiento_id'], cs['CAJA'], cs['BANCO'])
 
-        c_merca = await conn.fetchval("SELECT id FROM cuentas WHERE codigo = '140002'")
+        if not cuenta_pago_id:
+            cuenta_pago_id = cs['CAJA']
+
+        c_merca = cs['MERCADERIAS']
 
         asiento_id = await conn.fetchval(
             "INSERT INTO asientos (fecha, descripcion) VALUES (CURRENT_DATE, $1) RETURNING id;",

@@ -1,10 +1,10 @@
 # src/services/ventaServices.py
-import asyncpg
 import random
 from asyncpg import Connection
 from schemas.ventaSchema import VentaCreate
 from utils.exceptions import BadRequestException, NotFoundException, DatabaseException
 from services.clienteServices import obtener_o_crear_silencioso
+from services.cuentaSistemaServices import resolver_cuentas_sistema
 
 async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
     # Bloque Transaccional ACID
@@ -30,22 +30,15 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
             costo_unitario = float(prod['costo'])
             costo_total_venta += costo_unitario * item.cantidad
 
-        # 2. ENRUTAMIENTO CONTABLE DINÁMICO (6 DÍGITOS)
+        # 2. ENRUTAMIENTO CONTABLE DINÁMICO
         if venta_data.metodo_pago == "Efectivo":
-            codigo_cobro = '110001'
+            rol_cobro = 'CAJA'
         elif venta_data.metodo_pago == "Transferencia":
-            codigo_cobro = '110003'
+            rol_cobro = 'BANCO'
         else:
             raise BadRequestException(detail="Método de pago no soportado por el sistema.")
-        
-        cuentas_necesarias = [codigo_cobro, '410001', '510007', '140002']
-        cuentas_ids = {}
-        
-        for cod in cuentas_necesarias:
-            cuenta = await conn.fetchrow("SELECT id FROM cuentas WHERE codigo = $1;", cod)
-            if not cuenta:
-                raise DatabaseException(detail=f"Falla de configuración contable: No se encontró la cuenta con código {cod}.")
-            cuentas_ids[cod] = cuenta['id']
+
+        config = await resolver_cuentas_sistema(conn, [rol_cobro, 'VENTAS', 'CMV', 'MERCADERIAS'])
 
         # --- PASO 1: ASIENTO CONTABLE (Cabecera) ---
         query_asiento = "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;"
@@ -137,10 +130,10 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
 
         # --- PASO 4: PARTIDA DOBLE ---
         renglones_contables = [
-            (asiento_id, cuentas_ids[codigo_cobro], venta_data.total, 0.00),
-            (asiento_id, cuentas_ids['410001'], 0.00, venta_data.total),
-            (asiento_id, cuentas_ids['510007'], costo_total_venta, 0.00),
-            (asiento_id, cuentas_ids['140002'], 0.00, costo_total_venta)
+            (asiento_id, config[rol_cobro], venta_data.total, 0.00),
+            (asiento_id, config['VENTAS'], 0.00, venta_data.total),
+            (asiento_id, config['CMV'], costo_total_venta, 0.00),
+            (asiento_id, config['MERCADERIAS'], 0.00, costo_total_venta)
         ]
 
         await conn.executemany("""

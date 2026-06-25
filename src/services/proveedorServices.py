@@ -1,8 +1,8 @@
 # src/services/proveedorServices.py
-import asyncpg
 from asyncpg import Connection
 from schemas.proveedorSchema import PagoProveedorCreate
 from utils.exceptions import NotFoundException, DatabaseException
+from services.cuentaSistemaServices import resolver_cuentas_sistema
 
 async def obtener_deudas_activas(conn: Connection) -> list[dict]:
     # Lógica Contable: Pasivo aumenta por el Haber y disminuye por el Debe.
@@ -38,12 +38,9 @@ async def registrar_pago(conn: Connection, pago_data: PagoProveedorCreate) -> di
             raise NotFoundException(detail=f"La cuenta con ID {pago_data.cuenta_proveedor_id} no existe o no es de tipo Pasivo.")
 
         # 2. Mapeo de cuenta de salida
-        codigo_salida = '110001' if pago_data.metodo_pago == 'Efectivo' else '110003'
-        cuenta_salida = await conn.fetchrow("SELECT id FROM cuentas WHERE codigo = $1;", codigo_salida)
-        if not cuenta_salida:
-            raise DatabaseException(detail=f"Falla contable: No se encontró la cuenta de salida ({codigo_salida}).")
-        
-        cuenta_salida_id = cuenta_salida['id']
+        rol_salida = 'CAJA' if pago_data.metodo_pago == 'Efectivo' else 'BANCO'
+        config = await resolver_cuentas_sistema(conn, [rol_salida])
+        cuenta_salida_id = config[rol_salida]
 
         # 3. Asiento contable
         descripcion = pago_data.observaciones.strip() if pago_data.observaciones else f"Pago s/ {pago_data.tipo_comprobante} {pago_data.nro_comprobante_recibido}"

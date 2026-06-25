@@ -1,8 +1,8 @@
 # src/services/compraServices.py
-import asyncpg
 from asyncpg import Connection
 from schemas.compraSchema import CompraCreate
 from utils.exceptions import NotFoundException, DatabaseException
+from services.cuentaSistemaServices import resolver_cuentas_sistema
 
 async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
     async with conn.transaction():
@@ -18,30 +18,26 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
 
         # --- ENRUTAMIENTO CONTABLE (HABER) ---
         cuenta_haber_id = None
-        
+
         if compra_data.cuenta_proveedor_id is not None:
             cuenta_haber_id = compra_data.cuenta_proveedor_id
             cuenta_existe = await conn.fetchval("SELECT id FROM cuentas WHERE id = $1;", cuenta_haber_id)
             if not cuenta_existe:
                 raise NotFoundException(detail=f"La cuenta contable con ID {cuenta_haber_id} no existe.")
+            config = await resolver_cuentas_sistema(conn, ['MERCADERIAS'])
         else:
             if compra_data.metodo_pago == "Efectivo":
-                codigo_haber = '110001' # Caja
+                rol_haber = 'CAJA'
             elif compra_data.metodo_pago in ["Transferencia", "Tarjeta"]:
-                codigo_haber = '110003' # Banco
+                rol_haber = 'BANCO'
             else:
                 raise DatabaseException("Método de pago inválido.")
-                
-            cuenta = await conn.fetchrow("SELECT id FROM cuentas WHERE codigo = $1;", codigo_haber)
-            if not cuenta:
-                raise DatabaseException(detail=f"Falla contable: No se encontró la cuenta con código {codigo_haber}.")
-            cuenta_haber_id = cuenta['id']
+
+            config = await resolver_cuentas_sistema(conn, [rol_haber, 'MERCADERIAS'])
+            cuenta_haber_id = config[rol_haber]
 
         # --- ENRUTAMIENTO CONTABLE (DEBE) ---
-        cuenta_mercaderias = await conn.fetchrow("SELECT id FROM cuentas WHERE codigo = '140002';")
-        if not cuenta_mercaderias:
-            raise DatabaseException(detail="Falla contable: No se encontró la cuenta de Mercaderías (140002).")
-        cuenta_debe_id = cuenta_mercaderias['id']
+        cuenta_debe_id = config['MERCADERIAS']
 
         # --- PASO 1: ASIENTO CONTABLE ---
         descripcion_asiento = f"Compra s/ {compra_data.tipo_comprobante} {compra_data.nro_comprobante}"

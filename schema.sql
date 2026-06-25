@@ -222,3 +222,80 @@ CREATE TABLE public.compras_detalle (
 	CONSTRAINT compras_detalle_compra_id_fkey FOREIGN KEY (compra_id) REFERENCES public.compras_mercaderia(id) ON DELETE CASCADE,
 	CONSTRAINT compras_detalle_producto_id_fkey FOREIGN KEY (producto_id) REFERENCES public.producto(id)
 );
+
+
+-- public.clientes definition
+
+CREATE TABLE public.clientes (
+	cuit varchar(20) NOT NULL,
+	razon_social varchar(255) NULL,
+	domicilio_fiscal varchar(255) NULL,
+	condicion_iva varchar(50) NULL,
+	CONSTRAINT clientes_pkey PRIMARY KEY (cuit)
+);
+
+
+-- public.documentos_contables definition
+
+CREATE TABLE public.documentos_contables (
+	id serial4 NOT NULL,
+	tipo_comprobante varchar(50) NOT NULL,
+	nro_comprobante varchar(50) NOT NULL,
+	fecha_emision date NOT NULL,
+	total numeric(12, 2) NOT NULL,
+	cliente_proveedor_nombre varchar(150) NULL,
+	cliente_proveedor_identificacion varchar(50) NULL,
+	condicion_iva varchar(50) NULL,
+	subtotal_neto numeric(12, 2) NULL,
+	iva_21 numeric(12, 2) NULL,
+	venta_id int4 NULL,
+	compra_id int4 NULL,
+	comprobante_padre_id int4 NULL,
+	tipo_operacion varchar(50) NULL,
+	entidad_nombre varchar(150) NULL,
+	cliente_cuit varchar(20) NULL,
+	gasto_id int4 NULL,
+	CONSTRAINT documentos_contables_pkey PRIMARY KEY (id),
+	CONSTRAINT documentos_contables_cliente_cuit_fkey FOREIGN KEY (cliente_cuit) REFERENCES public.clientes(cuit),
+	CONSTRAINT fk_dc_compra FOREIGN KEY (compra_id) REFERENCES public.compras_mercaderia(id) ON DELETE CASCADE,
+	CONSTRAINT fk_dc_padre FOREIGN KEY (comprobante_padre_id) REFERENCES public.documentos_contables(id),
+	CONSTRAINT fk_dc_venta FOREIGN KEY (venta_id) REFERENCES public.ventas(id) ON DELETE CASCADE
+);
+
+
+-- public.cuentas_sistema definition
+
+CREATE TABLE public.cuentas_sistema (
+	rol varchar(50) NOT NULL,
+	cuenta_id int4 NOT NULL,
+	CONSTRAINT cuentas_sistema_pkey PRIMARY KEY (rol),
+	CONSTRAINT cuentas_sistema_cuenta_id_fkey FOREIGN KEY (cuenta_id) REFERENCES public.cuentas(id)
+);
+
+
+-- public.gastos definition
+
+CREATE TABLE public.gastos (
+	id serial4 NOT NULL,
+	fecha date NOT NULL,
+	descripcion varchar(255) NOT NULL,
+	cuenta_debe_id int4 NOT NULL,
+	monto numeric(12, 2) NOT NULL,
+	asiento_id int4 NOT NULL,
+	CONSTRAINT gastos_pkey PRIMARY KEY (id),
+	CONSTRAINT gastos_cuenta_fkey FOREIGN KEY (cuenta_debe_id) REFERENCES public.cuentas(id),
+	CONSTRAINT gastos_asiento_fkey FOREIGN KEY (asiento_id) REFERENCES public.asientos(id)
+);
+
+ALTER TABLE public.documentos_contables ADD CONSTRAINT fk_dc_gasto
+	FOREIGN KEY (gasto_id) REFERENCES public.gastos(id) ON DELETE CASCADE;
+
+
+-- Seed: cuentas_sistema (ejecutar después de tener las cuentas cargadas)
+-- INSERT INTO cuentas_sistema (rol, cuenta_id)
+-- SELECT 'CAJA', id FROM cuentas WHERE codigo = '110001' UNION ALL
+-- SELECT 'BANCO', id FROM cuentas WHERE codigo = '110003' UNION ALL
+-- SELECT 'MERCADERIAS', id FROM cuentas WHERE codigo = '140002' UNION ALL
+-- SELECT 'VENTAS', id FROM cuentas WHERE codigo = '410001' UNION ALL
+-- SELECT 'CMV', id FROM cuentas WHERE codigo = '510007' UNION ALL
+-- SELECT 'CAPITAL', id FROM cuentas WHERE codigo = '300001';

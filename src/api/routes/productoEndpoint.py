@@ -15,6 +15,11 @@ async def listar_productos(conn: Connection = Depends(get_db)):
     # Retornamos los datos crudos directamente (el array)
     return await productoServices.get_all_productos(conn)
 
+@router.get("/alertas-stock", status_code=status.HTTP_200_OK)
+async def alertas_stock(conn: Connection = Depends(get_db)):
+    return await productoServices.get_alertas_stock(conn)
+
+
 @router.get("/{producto_id}", response_model=ProductoResponse, status_code=status.HTTP_200_OK)
 async def obtener_producto(producto_id: int, conn: Connection = Depends(get_db)):
     """Obtiene un producto específico por su ID."""

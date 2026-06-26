@@ -81,7 +81,7 @@ CREATE SEQUENCE public.ventas_id_seq
 
 CREATE TABLE public.asientos (
 	id serial4 NOT NULL,
-	fecha date NOT NULL,
+	fecha timestamp NOT NULL,
 	descripcion varchar(255) NOT NULL,
 	CONSTRAINT asientos_pkey PRIMARY KEY (id)
 );
@@ -146,8 +146,10 @@ CREATE TABLE public.compras_mercaderia (
 	asiento_id int4 NOT NULL,
 	tipo_comprobante varchar(50) DEFAULT 'Ticket'::character varying NOT NULL,
 	nro_comprobante varchar(50) DEFAULT 'S/N'::character varying NOT NULL,
+	proveedor_id int4 NULL,
 	CONSTRAINT compras_mercaderia_pkey PRIMARY KEY (id),
-	CONSTRAINT compras_mercaderia_asiento_id_fkey FOREIGN KEY (asiento_id) REFERENCES public.asientos(id)
+	CONSTRAINT compras_mercaderia_asiento_id_fkey FOREIGN KEY (asiento_id) REFERENCES public.asientos(id),
+	CONSTRAINT compras_mercaderia_proveedor_fkey FOREIGN KEY (proveedor_id) REFERENCES public.proveedores(id)
 );
 
 
@@ -164,6 +166,7 @@ CREATE TABLE public.producto (
 	stock int4 DEFAULT 0 NOT NULL,
 	tipo varchar(50) NOT NULL,
 	costo numeric(10, 2) DEFAULT 0.00 NOT NULL,
+	stock_minimo int4 DEFAULT 5 NOT NULL,
 	CONSTRAINT producto_pkey PRIMARY KEY (id),
 	CONSTRAINT producto_precio_check CHECK ((precio >= (0)::numeric)),
 	CONSTRAINT producto_stock_check CHECK ((stock >= 0)),
@@ -263,6 +266,18 @@ CREATE TABLE public.documentos_contables (
 );
 
 
+-- public.proveedores definition
+
+CREATE TABLE public.proveedores (
+	id serial4 NOT NULL,
+	nombre varchar(150) NOT NULL,
+	cuit varchar(20) NULL,
+	domicilio varchar(255) NULL,
+	telefono varchar(50) NULL,
+	CONSTRAINT proveedores_pkey PRIMARY KEY (id)
+);
+
+
 -- public.cuentas_sistema definition
 
 CREATE TABLE public.cuentas_sistema (
@@ -282,13 +297,46 @@ CREATE TABLE public.gastos (
 	cuenta_debe_id int4 NOT NULL,
 	monto numeric(12, 2) NOT NULL,
 	asiento_id int4 NOT NULL,
+	proveedor_id int4 NULL,
 	CONSTRAINT gastos_pkey PRIMARY KEY (id),
 	CONSTRAINT gastos_cuenta_fkey FOREIGN KEY (cuenta_debe_id) REFERENCES public.cuentas(id),
-	CONSTRAINT gastos_asiento_fkey FOREIGN KEY (asiento_id) REFERENCES public.asientos(id)
+	CONSTRAINT gastos_asiento_fkey FOREIGN KEY (asiento_id) REFERENCES public.asientos(id),
+	CONSTRAINT gastos_proveedor_fkey FOREIGN KEY (proveedor_id) REFERENCES public.proveedores(id)
 );
 
 ALTER TABLE public.documentos_contables ADD CONSTRAINT fk_dc_gasto
 	FOREIGN KEY (gasto_id) REFERENCES public.gastos(id) ON DELETE CASCADE;
+
+
+-- public.pagos_proveedor definition
+
+CREATE TABLE public.pagos_proveedor (
+	id serial4 NOT NULL,
+	proveedor_id int4 NOT NULL,
+	fecha date NOT NULL,
+	monto numeric(12, 2) NOT NULL,
+	asiento_id int4 NOT NULL,
+	CONSTRAINT pagos_proveedor_pkey PRIMARY KEY (id),
+	CONSTRAINT pagos_proveedor_proveedor_fkey FOREIGN KEY (proveedor_id) REFERENCES public.proveedores(id),
+	CONSTRAINT pagos_proveedor_asiento_fkey FOREIGN KEY (asiento_id) REFERENCES public.asientos(id)
+);
+
+
+-- public.cierres_mensuales definition
+
+CREATE TABLE public.cierres_mensuales (
+	id serial4 NOT NULL,
+	periodo varchar(7) NOT NULL,
+	fecha_cierre date NOT NULL,
+	asiento_id int4 NOT NULL,
+	total_ingresos numeric(12, 2) NOT NULL DEFAULT 0,
+	total_egresos numeric(12, 2) NOT NULL DEFAULT 0,
+	resultado numeric(12, 2) NOT NULL DEFAULT 0,
+	observaciones varchar(255) NULL,
+	CONSTRAINT cierres_mensuales_pkey PRIMARY KEY (id),
+	CONSTRAINT cierres_mensuales_periodo_unique UNIQUE (periodo),
+	CONSTRAINT cierres_mensuales_asiento_fkey FOREIGN KEY (asiento_id) REFERENCES public.asientos(id)
+);
 
 
 -- Seed: cuentas_sistema (ejecutar después de tener las cuentas cargadas)
@@ -298,4 +346,6 @@ ALTER TABLE public.documentos_contables ADD CONSTRAINT fk_dc_gasto
 -- SELECT 'MERCADERIAS', id FROM cuentas WHERE codigo = '140002' UNION ALL
 -- SELECT 'VENTAS', id FROM cuentas WHERE codigo = '410001' UNION ALL
 -- SELECT 'CMV', id FROM cuentas WHERE codigo = '510007' UNION ALL
--- SELECT 'CAPITAL', id FROM cuentas WHERE codigo = '300001';
+-- SELECT 'CAPITAL', id FROM cuentas WHERE codigo = '300001'
+-- SELECT 'PROVEEDORES', id FROM cuentas WHERE codigo = '210001'
+-- SELECT 'RESULTADO_EJERCICIO', id FROM cuentas WHERE codigo = '310001';

@@ -1,7 +1,7 @@
 # src/api/routes/contabilidadEndpoint.py
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from asyncpg import Connection
-from typing import List
+from typing import List, Optional
 
 from core.session import get_db
 from schemas.contabilidadSchema import AsientoDiario, CuentaLibroMayor, AsientoManualCreate
@@ -9,46 +9,27 @@ from services import contabilidadServices
 
 router = APIRouter(prefix="/contabilidad", tags=["Reportes Contables"])
 
-@router.get(
-    "/libro-diario", 
-    response_model=List[AsientoDiario], 
-    status_code=status.HTTP_200_OK
-)
-async def consultar_libro_diario(conn: Connection = Depends(get_db)):
-    """
-    Obtiene todos los asientos contables registrados y sus detalles.
-    
-    Devuelve la información estructurada y agrupada por asiento, 
-    calculando automáticamente el cuadre (total Debe y total Haber) 
-    para su renderización en el frontend.
-    """
-    return await contabilidadServices.obtener_libro_diario(conn)
 
-@router.get(
-        "/libro-mayor",
-        response_model=List[CuentaLibroMayor],
-        status_code=status.HTTP_200_OK
-        )
-async def consultar_libro_mayor(
-    conn: Connection = Depends(get_db)
-    ):
-    """
-    Obtiene los movimientos agrupados por cuenta contable con saldo corrido incremental.
-    
-    Este reporte lee en tiempo real el Libro Diario y estructura de forma ordenada
-    las tarjetas o sábanas de cada cuenta con sus acumulados históricos.
-    """
-    return await contabilidadServices.obtener_libro_mayor(conn)
-
-@router.post(
-    "/asientos-manuales", 
-    status_code=status.HTTP_201_CREATED
-)
-async def registrar_asiento_manual(
-    asiento_data: AsientoManualCreate,
+@router.get("/libro-diario", response_model=List[AsientoDiario], status_code=status.HTTP_200_OK)
+async def consultar_libro_diario(
+    periodo: Optional[str] = Query(None, description="Filtrar por período YYYY-MM"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha inicio YYYY-MM-DD"),
+    fecha_hasta: Optional[str] = Query(None, description="Fecha fin YYYY-MM-DD"),
     conn: Connection = Depends(get_db)
 ):
-    """
-    Registra un asiento contable de forma manual asegurando el principio de Partida Doble.
-    """
+    return await contabilidadServices.obtener_libro_diario(conn, periodo=periodo, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+
+
+@router.get("/libro-mayor", response_model=List[CuentaLibroMayor], status_code=status.HTTP_200_OK)
+async def consultar_libro_mayor(
+    periodo: Optional[str] = Query(None, description="Filtrar por período YYYY-MM"),
+    fecha_desde: Optional[str] = Query(None, description="Fecha inicio YYYY-MM-DD"),
+    fecha_hasta: Optional[str] = Query(None, description="Fecha fin YYYY-MM-DD"),
+    conn: Connection = Depends(get_db)
+):
+    return await contabilidadServices.obtener_libro_mayor(conn, periodo=periodo, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
+
+
+@router.post("/asientos-manuales", status_code=status.HTTP_201_CREATED)
+async def registrar_asiento_manual(asiento_data: AsientoManualCreate, conn: Connection = Depends(get_db)):
     return await contabilidadServices.registrar_asiento_manual(conn, asiento_data)

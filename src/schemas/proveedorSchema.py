@@ -3,27 +3,29 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import Literal, Optional
 from datetime import datetime
 
+
 class DeudaProveedorResponse(BaseModel):
-    cuenta_id: int
-    cuenta_codigo: str
-    proveedor_cuenta: str
+    id: int
+    nombre: str
+    cuit: Optional[str] = None
     saldo_pendiente: float
-    
+
     model_config = ConfigDict(from_attributes=True)
+
 
 MetodoPago = Literal["Efectivo", "Transferencia"]
 
-class PagoProveedorCreate(BaseModel):
-    fecha: datetime = Field(..., description="Fecha y hora del pago")
-    cuenta_proveedor_id: int = Field(..., description="ID de la cuenta contable del proveedor (Pasivo)")
-    monto_pagado: float = Field(..., gt=0, description="Monto entregado al proveedor")
-    metodo_pago: MetodoPago = Field(..., description="Medio por el cual se cancela la deuda")
-    observaciones: Optional[str] = Field(None, description="Nota adicional para el asiento (Opcional)")
 
-    # Captura del recibo físico
-    tipo_comprobante: str = Field(..., description="Ej: 'Recibo X'")
-    nro_comprobante_recibido: str = Field(..., description="El número impreso en el papel")
-    comprobante_padre_id: Optional[int] = Field(default=None, description="Irá en null por defecto")
+class PagoProveedorCreate(BaseModel):
+    fecha: datetime = Field(...)
+    proveedor_id: int = Field(..., gt=0)
+    monto_pagado: float = Field(..., gt=0)
+    metodo_pago: MetodoPago = Field(...)
+    observaciones: Optional[str] = Field(None)
+    tipo_comprobante: str = Field(...)
+    nro_comprobante_recibido: str = Field(...)
+    comprobante_padre_id: Optional[int] = Field(default=None)
+
 
 class PagoProveedorResponse(BaseModel):
     asiento_id: int

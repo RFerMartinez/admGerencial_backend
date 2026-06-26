@@ -5,11 +5,15 @@ from schemas.ventaSchema import VentaCreate
 from utils.exceptions import BadRequestException, NotFoundException, DatabaseException
 from services.clienteServices import obtener_o_crear_silencioso
 from services.cuentaSistemaServices import resolver_cuentas_sistema
+from services.cierreServices import validar_periodo_abierto
+from datetime import datetime
 
 async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
     # Bloque Transaccional ACID
     async with conn.transaction():
-        
+
+        await validar_periodo_abierto(conn, venta_data.fecha.date())
+
         # --- PREPARACIÓN Y VALIDACIÓN ---
         costo_total_venta = 0.0
         
@@ -43,7 +47,8 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
         # --- PASO 1: ASIENTO CONTABLE (Cabecera) ---
         query_asiento = "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;"
         descripcion_asiento = f"Venta s/ {venta_data.tipo_comprobante} - {venta_data.metodo_pago.capitalize()}"
-        asiento_id = await conn.fetchval(query_asiento, venta_data.fecha.date(), descripcion_asiento)
+        fecha_naive = venta_data.fecha.replace(tzinfo=None) if venta_data.fecha.tzinfo else venta_data.fecha
+        asiento_id = await conn.fetchval(query_asiento, fecha_naive, descripcion_asiento)
 
         # --- PASO 2: REGISTRO OPERATIVO Y DOCUMENTAL ---
         

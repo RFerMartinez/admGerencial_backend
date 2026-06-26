@@ -1,7 +1,7 @@
 from asyncpg import Connection
 from utils.exceptions import DatabaseException, NotFoundException, BadRequestException
 
-ROLES_VALIDOS = {'CAJA', 'BANCO', 'MERCADERIAS', 'VENTAS', 'CMV', 'CAPITAL'}
+ROLES_VALIDOS = {'CAJA', 'BANCO', 'MERCADERIAS', 'VENTAS', 'CMV', 'CAPITAL', 'PROVEEDORES', 'RESULTADO_EJERCICIO'}
 
 
 async def resolver_cuentas_sistema(conn: Connection, roles: list[str]) -> dict[str, int]:

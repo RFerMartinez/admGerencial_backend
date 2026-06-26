@@ -1,12 +1,15 @@
 # src/services/capitalServices.py
 from asyncpg import Connection
+from datetime import datetime
 from schemas.capitalSchema import CapitalInicialCreate
 from utils.exceptions import DatabaseException
 from services.cuentaSistemaServices import resolver_cuentas_sistema
+from services.cierreServices import validar_periodo_abierto
 
 async def registrar_capital_inicial(conn: Connection, capital_data: CapitalInicialCreate) -> dict:
     try:
         async with conn.transaction():
+            await validar_periodo_abierto(conn, capital_data.fecha)
 
             monto_capital = capital_data.monto_caja + capital_data.monto_banco
 
@@ -15,8 +18,10 @@ async def registrar_capital_inicial(conn: Connection, capital_data: CapitalInici
 
             config = await resolver_cuentas_sistema(conn, ['CAJA', 'BANCO', 'CAPITAL'])
 
-            query_asiento = "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;"
-            asiento_id = await conn.fetchval(query_asiento, capital_data.fecha, "Por inicio de actividades")
+            asiento_id = await conn.fetchval(
+                "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;",
+                datetime.now(), "Por inicio de actividades"
+            )
 
             renglones_contables = [
                 (asiento_id, config['CAJA'], capital_data.monto_caja, 0.00),

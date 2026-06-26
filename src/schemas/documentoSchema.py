@@ -3,12 +3,23 @@ from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 from datetime import date
 
+
 # --- GET: Listado Universal ---
 class ItemOriginal(BaseModel):
     producto_id: int
     nombre: str
     cantidad: int
     precio_unitario: float
+
+
+class PadreInfo(BaseModel):
+    tipo_comprobante: str
+    nro_comprobante: str
+    fecha_emision: Optional[str] = None
+    total: float = 0
+    entidad: str = ''
+    tipo_operacion: str = ''
+
 
 class DocumentoListResponse(BaseModel):
     id: int
@@ -18,15 +29,28 @@ class DocumentoListResponse(BaseModel):
     nro_comprobante: str
     entidad_nombre: str
     total: float
-    items_originales: List[ItemOriginal]
+    venta_id: Optional[int] = None
+    compra_id: Optional[int] = None
+    gasto_id: Optional[int] = None
+    comprobante_padre_id: Optional[int] = None
+    cantidad_notas: int = 0
+    items_originales: List[ItemOriginal] = []
+    proveedor_nombre: Optional[str] = None
+    gasto_descripcion: Optional[str] = None
+    gasto_cuenta_nombre: Optional[str] = None
+    gasto_cuenta_codigo: Optional[str] = None
+    padre_info: Optional[PadreInfo] = None
+    nota_motivo: Optional[str] = None
+
 
 # --- POST: Notas de Crédito / Débito ---
 class ItemAfectado(BaseModel):
-    producto_id: int = Field(..., description="ID del producto afectado")
-    cantidad: int = Field(..., ge=0, description="Cantidad devuelta o recargada. 0 para ajustes financieros.")
-    precio_unitario: float = Field(..., ge=0, description="Precio unitario o costo")
-    nuevo_costo: Optional[float] = Field(None, description="Solo viaja en Compras si cantidad == 0")
-    nuevo_precio: Optional[float] = Field(None, description="Solo viaja en Ventas si cantidad == 0")
+    producto_id: int
+    cantidad: int = Field(..., ge=0)
+    precio_unitario: float = Field(..., ge=0)
+    nuevo_costo: Optional[float] = None
+    nuevo_precio: Optional[float] = None
+
 
 class NotaVentaCreate(BaseModel):
     comprobante_padre_id: int
@@ -34,6 +58,7 @@ class NotaVentaCreate(BaseModel):
     motivo: str
     total_modificado: float = Field(..., gt=0)
     items_afectados: List[ItemAfectado] = []
+
 
 class NotaCompraCreate(BaseModel):
     comprobante_padre_id: int
@@ -43,6 +68,7 @@ class NotaCompraCreate(BaseModel):
     total_modificado: float = Field(..., gt=0)
     items_afectados: List[ItemAfectado] = []
 
+
 class NotaResponse(BaseModel):
     id: int
     asiento_id: int
@@ -50,4 +76,3 @@ class NotaResponse(BaseModel):
     mensaje: str
 
     model_config = ConfigDict(from_attributes=True)
-

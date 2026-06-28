@@ -221,3 +221,73 @@ async def registrar_asiento_manual(conn: Connection, asiento_data: AsientoManual
         raise
     except Exception as e:
         raise DatabaseException(f"Fallo al registrar el asiento manual: {str(e)}")
+
+
+async def obtener_balance(conn: Connection, fecha: Optional[str] = None) -> dict:
+    try:
+        fecha_corte = date.fromisoformat(fecha) if fecha else date.today()
+        ts_corte = datetime.combine(fecha_corte, datetime.max.time())
+
+        query = """
+            SELECT
+                c.id, c.codigo, c.nombre, c.tipo,
+                SUM(ad.debe) as total_debe,
+                SUM(ad.haber) as total_haber
+            FROM asientos_detalle ad
+            JOIN asientos a ON ad.asiento_id = a.id
+            JOIN cuentas c ON ad.cuenta_id = c.id
+            WHERE a.fecha <= $1
+            GROUP BY c.id, c.codigo, c.nombre, c.tipo
+            ORDER BY c.codigo;
+        """
+        records = await conn.fetch(query, ts_corte)
+
+        activo = []
+        pasivo = []
+        patrimonio = []
+        total_ingresos = 0.0
+        total_egresos = 0.0
+
+        for r in records:
+            debe = float(r['total_debe'])
+            haber = float(r['total_haber'])
+            tipo = r['tipo']
+
+            if tipo == 'Activo':
+                saldo = debe - haber
+                if saldo != 0:
+                    activo.append({"cuenta_id": r['id'], "codigo": r['codigo'], "nombre": r['nombre'], "saldo": saldo})
+            elif tipo == 'Pasivo':
+                saldo = haber - debe
+                if saldo != 0:
+                    pasivo.append({"cuenta_id": r['id'], "codigo": r['codigo'], "nombre": r['nombre'], "saldo": saldo})
+            elif tipo == 'Patrimonio Neto':
+                saldo = haber - debe
+                if saldo != 0:
+                    patrimonio.append({"cuenta_id": r['id'], "codigo": r['codigo'], "nombre": r['nombre'], "saldo": saldo})
+            elif tipo == 'Ingreso':
+                total_ingresos += (haber - debe)
+            elif tipo == 'Egreso':
+                total_egresos += (debe - haber)
+
+        resultado_ejercicio = total_ingresos - total_egresos
+        total_activo = sum(c['saldo'] for c in activo)
+        total_pasivo = sum(c['saldo'] for c in pasivo)
+        total_patrimonio = sum(c['saldo'] for c in patrimonio)
+        total_pasivo_pn = total_pasivo + total_patrimonio + resultado_ejercicio
+
+        return {
+            "fecha_corte": str(fecha_corte),
+            "activo": {"cuentas": activo, "total": round(total_activo, 2)},
+            "pasivo": {"cuentas": pasivo, "total": round(total_pasivo, 2)},
+            "patrimonio_neto": {
+                "cuentas": patrimonio,
+                "resultado_ejercicio": round(resultado_ejercicio, 2),
+                "total": round(total_patrimonio + resultado_ejercicio, 2)
+            },
+            "total_pasivo_patrimonio": round(total_pasivo_pn, 2),
+            "ecuacion_verificada": round(total_activo, 2) == round(total_pasivo_pn, 2)
+        }
+
+    except Exception as e:
+        raise DatabaseException(f"Error al generar el Balance General: {str(e)}")

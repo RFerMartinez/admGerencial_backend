@@ -1,5 +1,5 @@
 from asyncpg import Connection
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from schemas.cierreSchema import CierreCreate
 from utils.exceptions import BadRequestException, DatabaseException
 from services.cuentaSistemaServices import resolver_cuentas_sistema
@@ -52,6 +52,17 @@ async def obtener_cierre_detalle(conn: Connection, cierre_id: int) -> dict:
     }
 
 
+def _rango_periodo(periodo: str):
+    partes = periodo.split('-')
+    anio, mes = int(partes[0]), int(partes[1])
+    ts_inicio = datetime(anio, mes, 1, 0, 0, 0)
+    if mes == 12:
+        ts_fin = datetime(anio + 1, 1, 1, 0, 0, 0)
+    else:
+        ts_fin = datetime(anio, mes + 1, 1, 0, 0, 0)
+    return ts_inicio, ts_fin
+
+
 async def preview_cierre(conn: Connection, periodo: str) -> dict:
     existente = await conn.fetchval(
         "SELECT id FROM cierres_mensuales WHERE periodo = $1;", periodo
@@ -59,8 +70,7 @@ async def preview_cierre(conn: Connection, periodo: str) -> dict:
     if existente:
         raise BadRequestException(detail=f"El período {periodo} ya fue cerrado.")
 
-    partes = periodo.split('-')
-    fecha_inicio = date(int(partes[0]), int(partes[1]), 1)
+    ts_inicio, ts_fin = _rango_periodo(periodo)
 
     ingresos = await conn.fetch("""
         SELECT c.id as cuenta_id, c.codigo as cuenta_codigo, c.nombre as cuenta_nombre,
@@ -69,12 +79,11 @@ async def preview_cierre(conn: Connection, periodo: str) -> dict:
         JOIN asientos_detalle ad ON c.id = ad.cuenta_id
         JOIN asientos a ON ad.asiento_id = a.id
         WHERE c.tipo = 'Ingreso'
-          AND a.fecha >= $1
-          AND a.fecha < ($1 + INTERVAL '1 month')
+          AND a.fecha >= $1 AND a.fecha < $2
         GROUP BY c.id, c.codigo, c.nombre
         HAVING COALESCE(SUM(ad.haber), 0) - COALESCE(SUM(ad.debe), 0) != 0
         ORDER BY c.codigo;
-    """, fecha_inicio)
+    """, ts_inicio, ts_fin)
 
     egresos = await conn.fetch("""
         SELECT c.id as cuenta_id, c.codigo as cuenta_codigo, c.nombre as cuenta_nombre,
@@ -83,12 +92,11 @@ async def preview_cierre(conn: Connection, periodo: str) -> dict:
         JOIN asientos_detalle ad ON c.id = ad.cuenta_id
         JOIN asientos a ON ad.asiento_id = a.id
         WHERE c.tipo = 'Egreso'
-          AND a.fecha >= $1
-          AND a.fecha < ($1 + INTERVAL '1 month')
+          AND a.fecha >= $1 AND a.fecha < $2
         GROUP BY c.id, c.codigo, c.nombre
         HAVING COALESCE(SUM(ad.debe), 0) - COALESCE(SUM(ad.haber), 0) != 0
         ORDER BY c.codigo;
-    """, fecha_inicio)
+    """, ts_inicio, ts_fin)
 
     ingresos_list = [dict(r) for r in ingresos]
     egresos_list = [dict(r) for r in egresos]
@@ -121,10 +129,8 @@ async def ejecutar_cierre(conn: Connection, data: CierreCreate) -> dict:
         config = await resolver_cuentas_sistema(conn, ['RESULTADO_EJERCICIO'])
         cuenta_resultado_id = config['RESULTADO_EJERCICIO']
 
-        from datetime import timedelta
         partes = data.periodo.split('-')
-        anio = int(partes[0])
-        mes = int(partes[1])
+        anio, mes = int(partes[0]), int(partes[1])
         if mes == 12:
             ultimo_dia = date(anio, 12, 31)
         else:

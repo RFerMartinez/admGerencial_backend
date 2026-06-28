@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        @page { size: a4; margin: 10mm 12mm; }
+        body { font-family: Helvetica, Arial, sans-serif; font-size: 9px; color: #000; margin: 0; }
+    </style>
+</head>
+<body>
+<table width="100%" cellpadding="0" cellspacing="0" style="border: 2px solid #000;">
+
+    <!-- ORIGINAL -->
+    <tr>
+        <td colspan="3" style="text-align: center; font-weight: bold; font-size: 11px; padding: 4px 0; border-bottom: 2px solid #000;">ORIGINAL</td>
+    </tr>
+
+    <!-- ENCABEZADO: Empresa | Letra | Factura -->
+    <tr>
+        <td width="42%" style="padding: 10px 14px 10px 14px; border-bottom: 2px solid #000; border-right: 1px solid #000; vertical-align: top;">
+            <b style="font-size: 18px;">KusKus</b><br/><br/>
+            <span style="font-size: 8px;">
+            <b>Razón Social:</b> KusKus S.R.L.<br/>
+            <b>Domicilio Comercial:</b> Presidencia Roque Sáenz Peña, Chaco<br/>
+            <b>Condición frente al IVA:</b> IVA Responsable Inscripto
+            </span>
+        </td>
+
+        <td width="16%" style="text-align: center; vertical-align: middle; border-bottom: 2px solid #000; border-right: 1px solid #000; padding: 6px;">
+            <table align="center" cellpadding="0" cellspacing="0" style="border: 2px solid #000;">
+                <tr><td style="text-align: center; padding: 6px 20px 4px 20px; font-size: 34px; font-weight: bold; line-height: 1;">B</td></tr>
+                <tr><td style="text-align: center; padding: 2px 10px 6px 10px; font-size: 8px;">COD. 64</td></tr>
+            </table>
+        </td>
+
+        <td width="42%" style="padding: 10px 14px 10px 14px; border-bottom: 2px solid #000; vertical-align: top;">
+            <b style="font-size: 18px;">FACTURA</b><br/><br/>
+            <span style="font-size: 8px;">
+            <b>Punto de Venta:</b> 00001 &nbsp;&nbsp; <b>Comp. Nro:</b> {{ venta.nro_comprobante }}<br/>
+            <b>Fecha de Emisión:</b> {{ venta.fecha }}<br/>
+            <b>CUIT:</b> 00-00000000-0<br/>
+            <b>Fecha Inicio Actividades:</b> 01/01/2026
+            </span>
+        </td>
+    </tr>
+
+    <!-- RECEPTOR -->
+    <tr>
+        <td colspan="3" style="padding: 8px 14px; border-bottom: 2px solid #000; font-size: 8px; line-height: 1.8;">
+            <b>CUIT:</b> {{ venta.cliente_identificacion if venta.cliente_identificacion else '-' }}
+            &nbsp;&nbsp;&nbsp;&nbsp;
+            <b>Apellido y Nombre / Razón Social:</b> {{ venta.cliente_nombre if venta.cliente_nombre else 'Consumidor Final' }}
+            &nbsp;&nbsp;&nbsp;&nbsp;
+            <span style="color: #888;">receptor de factura</span><br/>
+            <b>Condición frente al IVA:</b> Consumidor Final
+            &nbsp;&nbsp;&nbsp;&nbsp;
+            <b>Domicilio Comercial:</b> {{ venta.cliente_domicilio if venta.cliente_domicilio else '-' }}<br/>
+            <b>Condición de Venta:</b> {{ venta.metodo_pago }}
+        </td>
+    </tr>
+
+    <!-- ITEMS -->
+    <tr>
+        <td colspan="3" style="padding: 0;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                    <td style="padding: 5px 8px; font-size: 7px; font-weight: bold; border-bottom: 2px solid #000; border-top: 1px solid #000; width: 8%;">Código</td>
+                    <td style="padding: 5px 8px; font-size: 7px; font-weight: bold; border-bottom: 2px solid #000; border-top: 1px solid #000; width: 30%;">Producto / Servicio</td>
+                    <td style="padding: 5px 8px; font-size: 7px; font-weight: bold; border-bottom: 2px solid #000; border-top: 1px solid #000; text-align: center; width: 10%;">Cantidad</td>
+                    <td style="padding: 5px 8px; font-size: 7px; font-weight: bold; border-bottom: 2px solid #000; border-top: 1px solid #000; text-align: center; width: 10%;">U. medida</td>
+                    <td style="padding: 5px 8px; font-size: 7px; font-weight: bold; border-bottom: 2px solid #000; border-top: 1px solid #000; text-align: right; width: 14%;">Precio Unit.</td>
+                    <td style="padding: 5px 8px; font-size: 7px; font-weight: bold; border-bottom: 2px solid #000; border-top: 1px solid #000; text-align: center; width: 8%;">% Bonif.</td>
+                    <td style="padding: 5px 8px; font-size: 7px; font-weight: bold; border-bottom: 2px solid #000; border-top: 1px solid #000; text-align: center; width: 8%;">Imp. Bonif.</td>
+                    <td style="padding: 5px 8px; font-size: 7px; font-weight: bold; border-bottom: 2px solid #000; border-top: 1px solid #000; text-align: right; width: 14%;">Subtotal</td>
+                </tr>
+                {% for item in items %}
+                <tr>
+                    <td style="padding: 5px 8px; font-size: 8px;">{{ "{:03d}".format(loop.index) }}</td>
+                    <td style="padding: 5px 8px; font-size: 8px;">{{ item.nombre }}</td>
+                    <td style="padding: 5px 8px; font-size: 8px; text-align: center;">{{ "{:.2f}".format(item.cantidad) }}</td>
+                    <td style="padding: 5px 8px; font-size: 8px; text-align: center;">unidad</td>
+                    <td style="padding: 5px 8px; font-size: 8px; text-align: right;">$ {{ "{:,.2f}".format(item.precio_unitario) }}</td>
+                    <td style="padding: 5px 8px; font-size: 8px; text-align: center;">-</td>
+                    <td style="padding: 5px 8px; font-size: 8px; text-align: center;">-</td>
+                    <td style="padding: 5px 8px; font-size: 8px; text-align: right;">$ {{ "{:,.2f}".format(item.cantidad * item.precio_unitario) }}</td>
+                </tr>
+                {% endfor %}
+                <tr><td colspan="8" style="height: 260px; border-bottom: 1px solid #ccc;"></td></tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- TOTALES -->
+    <tr>
+        <td colspan="3" style="padding: 0;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                    <td width="55%"></td>
+                    <td style="padding: 4px 10px; text-align: right; font-size: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Subtotal: $</td>
+                    <td style="padding: 4px 10px; text-align: right; font-size: 8px; width: 14%; border-bottom: 1px solid #eee;">{{ "{:,.2f}".format(venta.total) }}</td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td style="padding: 4px 10px; text-align: right; font-size: 8px; font-weight: bold; border-bottom: 1px solid #eee;">Importe Otros tributos: $</td>
+                    <td style="padding: 4px 10px; text-align: right; font-size: 8px; border-bottom: 1px solid #eee;">0,00</td>
+                </tr>
+                <tr>
+                    <td></td>
+                    <td style="padding: 6px 10px; text-align: right; font-size: 11px; font-weight: bold; border-top: 2px solid #000;">Importe Total: $</td>
+                    <td style="padding: 6px 10px; text-align: right; font-size: 11px; font-weight: bold; border-top: 2px solid #000;">{{ "{:,.2f}".format(venta.total) }}</td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+
+    <!-- PIE -->
+    <tr>
+        <td colspan="3" style="text-align: center; padding: 6px; border-top: 1px solid #000; font-size: 8px; font-style: italic; color: #555;">"KusKus S.R.L."</td>
+    </tr>
+</table>
+</body>
+</html>

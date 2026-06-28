@@ -30,6 +30,14 @@ async def consultar_libro_mayor(
     return await contabilidadServices.obtener_libro_mayor(conn, periodo=periodo, fecha_desde=fecha_desde, fecha_hasta=fecha_hasta)
 
 
+@router.get("/balance", status_code=status.HTTP_200_OK)
+async def consultar_balance(
+    fecha: Optional[str] = Query(None, description="Balance acumulado hasta esta fecha YYYY-MM-DD (default: hoy)"),
+    conn: Connection = Depends(get_db)
+):
+    return await contabilidadServices.obtener_balance(conn, fecha=fecha)
+
+
 @router.post("/asientos-manuales", status_code=status.HTTP_201_CREATED)
 async def registrar_asiento_manual(asiento_data: AsientoManualCreate, conn: Connection = Depends(get_db)):
     return await contabilidadServices.registrar_asiento_manual(conn, asiento_data)

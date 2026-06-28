@@ -32,9 +32,10 @@ async def registrar_pago(conn: Connection, pago_data: PagoProveedorCreate) -> di
         # 3. Asiento contable: DEBE Proveedores, HABER Caja/Banco
         descripcion = pago_data.observaciones.strip() if pago_data.observaciones else f"Pago a {prov['nombre']} s/ {pago_data.tipo_comprobante} {pago_data.nro_comprobante_recibido}"
 
+        fecha_naive = pago_data.fecha.replace(tzinfo=None) if pago_data.fecha.tzinfo else pago_data.fecha
         asiento_id = await conn.fetchval(
             "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;",
-            pago_data.fecha, descripcion
+            fecha_naive, descripcion
         )
 
         renglones_contables = [

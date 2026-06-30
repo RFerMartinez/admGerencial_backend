@@ -1,15 +1,15 @@
 from fastapi import APIRouter, Depends, status
 from typing import List
 from core.session import get_db
-from schemas.proveedorMaestroSchema import ProveedorCreate, ProveedorResponse
+from schemas.proveedorMaestroSchema import ProveedorCreate, ProveedorResponse, ProveedorEstadoUpdate
 from services import proveedorMaestroServices
 
 router = APIRouter(prefix="/proveedores/maestro", tags=["Proveedores - Maestro"])
 
 
 @router.get("/", response_model=List[ProveedorResponse], status_code=status.HTTP_200_OK)
-async def listar_proveedores(conn=Depends(get_db)):
-    return await proveedorMaestroServices.obtener_todos(conn)
+async def listar_proveedores(incluir_inactivos: bool = False, conn=Depends(get_db)):
+    return await proveedorMaestroServices.obtener_todos(conn, solo_activos=not incluir_inactivos)
 
 
 @router.get("/{proveedor_id}", response_model=ProveedorResponse, status_code=status.HTTP_200_OK)
@@ -27,6 +27,6 @@ async def actualizar_proveedor(proveedor_id: int, data: ProveedorCreate, conn=De
     return await proveedorMaestroServices.actualizar(conn, proveedor_id, data)
 
 
-@router.delete("/{proveedor_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def eliminar_proveedor(proveedor_id: int, conn=Depends(get_db)):
-    await proveedorMaestroServices.eliminar(conn, proveedor_id)
+@router.patch("/{proveedor_id}/estado", response_model=ProveedorResponse, status_code=status.HTTP_200_OK)
+async def cambiar_estado_proveedor(proveedor_id: int, data: ProveedorEstadoUpdate, conn=Depends(get_db)):
+    return await proveedorMaestroServices.cambiar_estado(conn, proveedor_id, data.activo)

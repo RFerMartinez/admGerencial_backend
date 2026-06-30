@@ -1,6 +1,6 @@
 # src/schemas/compraSchema.py
 from pydantic import BaseModel, Field, ConfigDict, model_validator
-from typing import List, Optional
+from typing import List, Optional, Literal
 from datetime import date
 
 
@@ -17,15 +17,13 @@ class CompraCreate(BaseModel):
     total: float = Field(..., gt=0)
     detalles: List[CompraDetalle] = Field(..., min_length=1)
 
-    metodo_pago: Optional[str] = Field(None)
+    metodo_pago: Literal["Efectivo", "Transferencia", "Tarjeta", "Cuenta Corriente"]
     proveedor_id: Optional[int] = Field(None)
 
     @model_validator(mode='after')
     def validar_campos_condicionales(self):
-        if self.proveedor_id is not None:
-            self.metodo_pago = None
-        elif self.metodo_pago is None:
-            raise ValueError("Debe indicar 'metodo_pago' o 'proveedor_id'.")
+        if self.metodo_pago == "Cuenta Corriente" and self.proveedor_id is None:
+            raise ValueError("Debe seleccionar un proveedor para compras a Cuenta Corriente.")
         return self
 
     model_config = ConfigDict(populate_by_name=True)

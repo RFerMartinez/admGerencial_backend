@@ -20,20 +20,21 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
             if not prod:
                 raise NotFoundException(detail=f"El producto con ID {item.producto_id} no existe.")
 
-        # --- ENRUTAMIENTO CONTABLE ---
+        # --- VALIDACIÓN DE PROVEEDOR (si fue indicado, sea cual sea el método de pago) ---
+        entidad_nombre = None
         if compra_data.proveedor_id is not None:
-            # Compra a crédito: validar proveedor + usar cuenta única PROVEEDORES
             prov = await conn.fetchrow(
                 "SELECT id, nombre FROM proveedores WHERE id = $1;", compra_data.proveedor_id
             )
             if not prov:
                 raise NotFoundException(detail=f"El proveedor con ID {compra_data.proveedor_id} no existe.")
+            entidad_nombre = prov['nombre']
 
+        # --- ENRUTAMIENTO CONTABLE ---
+        if compra_data.metodo_pago == "Cuenta Corriente":
             config = await resolver_cuentas_sistema(conn, ['MERCADERIAS', 'PROVEEDORES'])
             cuenta_haber_id = config['PROVEEDORES']
-            entidad_nombre = prov['nombre']
         else:
-            # Compra al contado
             if compra_data.metodo_pago == "Efectivo":
                 rol_haber = 'CAJA'
             elif compra_data.metodo_pago in ["Transferencia", "Tarjeta"]:
@@ -43,7 +44,6 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
 
             config = await resolver_cuentas_sistema(conn, [rol_haber, 'MERCADERIAS'])
             cuenta_haber_id = config[rol_haber]
-            entidad_nombre = None
 
         cuenta_debe_id = config['MERCADERIAS']
 
@@ -56,9 +56,9 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
 
         # --- PASO 2: REGISTRO OPERATIVO Y DOCUMENTAL ---
         compra_id = await conn.fetchval("""
-            INSERT INTO compras_mercaderia (fecha, total, asiento_id, proveedor_id)
-            VALUES ($1, $2, $3, $4) RETURNING id;
-        """, compra_data.fecha, compra_data.total, asiento_id, compra_data.proveedor_id)
+            INSERT INTO compras_mercaderia (fecha, total, asiento_id, proveedor_id, metodo_pago)
+            VALUES ($1, $2, $3, $4, $5) RETURNING id;
+        """, compra_data.fecha, compra_data.total, asiento_id, compra_data.proveedor_id, compra_data.metodo_pago)
 
         await conn.fetchval("""
             INSERT INTO documentos_contables (

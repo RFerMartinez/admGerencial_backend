@@ -15,8 +15,13 @@ class ProveedorResponse(BaseModel):
     cuit: Optional[str] = None
     domicilio: Optional[str] = None
     telefono: Optional[str] = None
+    activo: bool = True
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class ProveedorEstadoUpdate(BaseModel):
+    activo: bool
 
 
 class ProveedorConDeuda(BaseModel):

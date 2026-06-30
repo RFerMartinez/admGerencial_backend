@@ -89,9 +89,9 @@ async def obtener_dashboard(conn: Connection) -> dict:
             FROM proveedores p
             LEFT JOIN (
                 SELECT proveedor_id, SUM(total_deuda) AS total_deuda FROM (
-                    SELECT proveedor_id, SUM(total) AS total_deuda FROM compras_mercaderia WHERE proveedor_id IS NOT NULL GROUP BY proveedor_id
+                    SELECT proveedor_id, SUM(total) AS total_deuda FROM compras_mercaderia WHERE proveedor_id IS NOT NULL AND metodo_pago = 'Cuenta Corriente' GROUP BY proveedor_id
                     UNION ALL
-                    SELECT proveedor_id, SUM(monto) AS total_deuda FROM gastos WHERE proveedor_id IS NOT NULL GROUP BY proveedor_id
+                    SELECT proveedor_id, SUM(monto) AS total_deuda FROM gastos WHERE proveedor_id IS NOT NULL AND metodo_pago = 'Cuenta Corriente' GROUP BY proveedor_id
                 ) s GROUP BY proveedor_id
             ) d ON p.id = d.proveedor_id
             LEFT JOIN (

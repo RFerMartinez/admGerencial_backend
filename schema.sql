@@ -147,6 +147,7 @@ CREATE TABLE public.compras_mercaderia (
 	tipo_comprobante varchar(50) DEFAULT 'Ticket'::character varying NOT NULL,
 	nro_comprobante varchar(50) DEFAULT 'S/N'::character varying NOT NULL,
 	proveedor_id int4 NULL,
+	metodo_pago varchar(20) NULL,
 	CONSTRAINT compras_mercaderia_pkey PRIMARY KEY (id),
 	CONSTRAINT compras_mercaderia_asiento_id_fkey FOREIGN KEY (asiento_id) REFERENCES public.asientos(id),
 	CONSTRAINT compras_mercaderia_proveedor_fkey FOREIGN KEY (proveedor_id) REFERENCES public.proveedores(id)
@@ -234,6 +235,8 @@ CREATE TABLE public.clientes (
 	razon_social varchar(255) NULL,
 	domicilio_fiscal varchar(255) NULL,
 	condicion_iva varchar(50) NULL,
+	activo boolean NOT NULL DEFAULT true,
+	telefono varchar(50) NULL,
 	CONSTRAINT clientes_pkey PRIMARY KEY (cuit)
 );
 
@@ -274,6 +277,7 @@ CREATE TABLE public.proveedores (
 	cuit varchar(20) NULL,
 	domicilio varchar(255) NULL,
 	telefono varchar(50) NULL,
+	activo boolean NOT NULL DEFAULT true,
 	CONSTRAINT proveedores_pkey PRIMARY KEY (id)
 );
 
@@ -298,6 +302,7 @@ CREATE TABLE public.gastos (
 	monto numeric(12, 2) NOT NULL,
 	asiento_id int4 NOT NULL,
 	proveedor_id int4 NULL,
+	metodo_pago varchar(20) NULL,
 	CONSTRAINT gastos_pkey PRIMARY KEY (id),
 	CONSTRAINT gastos_cuenta_fkey FOREIGN KEY (cuenta_debe_id) REFERENCES public.cuentas(id),
 	CONSTRAINT gastos_asiento_fkey FOREIGN KEY (asiento_id) REFERENCES public.asientos(id),

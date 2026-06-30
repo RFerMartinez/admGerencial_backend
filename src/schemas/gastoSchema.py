@@ -10,15 +10,13 @@ class GastoCreate(BaseModel):
     monto: float = Field(..., gt=0)
     tipo_comprobante: str = Field(..., min_length=1, max_length=50)
     nro_comprobante: str = Field(default="S/N", max_length=50)
-    metodo_pago: Optional[Literal["Efectivo", "Transferencia"]] = None
+    metodo_pago: Literal["Efectivo", "Transferencia", "Cuenta Corriente"]
     proveedor_id: Optional[int] = None
 
     @model_validator(mode='after')
     def validar_pago(self):
-        if self.proveedor_id is not None:
-            self.metodo_pago = None
-        elif self.metodo_pago is None:
-            raise ValueError("Debe indicar 'metodo_pago' o 'proveedor_id'.")
+        if self.metodo_pago == "Cuenta Corriente" and self.proveedor_id is None:
+            raise ValueError("Debe seleccionar un proveedor para gastos a Cuenta Corriente.")
         return self
 
     model_config = ConfigDict(populate_by_name=True)

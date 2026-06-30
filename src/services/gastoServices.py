@@ -18,7 +18,8 @@ async def registrar_gasto(conn: Connection, gasto_data: GastoCreate) -> dict:
         if not cuenta_debe:
             raise NotFoundException(detail=f"La cuenta con ID {gasto_data.cuenta_debe_id} no existe.")
 
-        # 2. Resolver cuenta al haber
+        # 2. Validar proveedor (si fue indicado, sea cual sea el método de pago) y resolver cuenta al haber
+        entidad_nombre = None
         if gasto_data.proveedor_id is not None:
             prov = await conn.fetchrow(
                 "SELECT id, nombre FROM proveedores WHERE id = $1;",
@@ -26,15 +27,15 @@ async def registrar_gasto(conn: Connection, gasto_data: GastoCreate) -> dict:
             )
             if not prov:
                 raise NotFoundException(detail=f"El proveedor con ID {gasto_data.proveedor_id} no existe.")
+            entidad_nombre = prov['nombre']
 
+        if gasto_data.metodo_pago == "Cuenta Corriente":
             config = await resolver_cuentas_sistema(conn, ['PROVEEDORES'])
             cuenta_haber_id = config['PROVEEDORES']
-            entidad_nombre = prov['nombre']
         else:
             rol = 'CAJA' if gasto_data.metodo_pago == 'Efectivo' else 'BANCO'
             config = await resolver_cuentas_sistema(conn, [rol])
             cuenta_haber_id = config[rol]
-            entidad_nombre = None
 
         # 3. Asiento contable
         descripcion = f"Gasto s/ {gasto_data.tipo_comprobante} {gasto_data.nro_comprobante} - {gasto_data.descripcion}"
@@ -45,10 +46,10 @@ async def registrar_gasto(conn: Connection, gasto_data: GastoCreate) -> dict:
 
         # 4. Registro operativo
         gasto_id = await conn.fetchval("""
-            INSERT INTO gastos (fecha, descripcion, cuenta_debe_id, monto, asiento_id, proveedor_id)
-            VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;
+            INSERT INTO gastos (fecha, descripcion, cuenta_debe_id, monto, asiento_id, proveedor_id, metodo_pago)
+            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id;
         """, gasto_data.fecha, gasto_data.descripcion, gasto_data.cuenta_debe_id,
-            gasto_data.monto, asiento_id, gasto_data.proveedor_id)
+            gasto_data.monto, asiento_id, gasto_data.proveedor_id, gasto_data.metodo_pago)
 
         # 5. Registro documental
         await conn.execute("""

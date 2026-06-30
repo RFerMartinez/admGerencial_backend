@@ -1,7 +1,7 @@
 # src/schemas/proveedorSchema.py
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Literal, Optional
-from datetime import datetime
+from datetime import datetime, date
 
 
 class DeudaProveedorResponse(BaseModel):
@@ -30,3 +30,11 @@ class PagoProveedorCreate(BaseModel):
 class PagoProveedorResponse(BaseModel):
     asiento_id: int
     mensaje: str = "Pago registrado y contabilizado exitosamente."
+
+
+class MovimientoProveedor(BaseModel):
+    tipo: Literal["Compra", "Gasto", "Pago"]
+    fecha: date
+    descripcion: str
+    monto: float  # positivo = genera deuda, negativo = reduce deuda (pago)
+    saldo_acumulado: float

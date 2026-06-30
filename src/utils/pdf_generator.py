@@ -29,3 +29,19 @@ def resolver_comprobante_pdf(venta_data: dict, items_data: list) -> bytes:
         raise Exception("Error al generar el PDF del comprobante.")
 
     return pdf_buffer.getvalue()
+
+
+def resolver_nota_pdf(nota_data: dict) -> bytes:
+    env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+
+    template = env.get_template("nota_a.html" if nota_data.get("letra") == "A" else "nota_b.html")
+
+    html_out = template.render(nota=nota_data)
+
+    pdf_buffer = BytesIO()
+    pisa_status = pisa.CreatePDF(html_out, dest=pdf_buffer)
+
+    if pisa_status.err:
+        raise Exception("Error al generar el PDF de la nota.")
+
+    return pdf_buffer.getvalue()

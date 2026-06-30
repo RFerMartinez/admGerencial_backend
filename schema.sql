@@ -261,6 +261,7 @@ CREATE TABLE public.documentos_contables (
 	entidad_nombre varchar(150) NULL,
 	cliente_cuit varchar(20) NULL,
 	gasto_id int4 NULL,
+	pago_id int4 NULL,
 	CONSTRAINT documentos_contables_pkey PRIMARY KEY (id),
 	CONSTRAINT documentos_contables_cliente_cuit_fkey FOREIGN KEY (cliente_cuit) REFERENCES public.clientes(cuit),
 	CONSTRAINT fk_dc_compra FOREIGN KEY (compra_id) REFERENCES public.compras_mercaderia(id) ON DELETE CASCADE,
@@ -325,6 +326,9 @@ CREATE TABLE public.pagos_proveedor (
 	CONSTRAINT pagos_proveedor_proveedor_fkey FOREIGN KEY (proveedor_id) REFERENCES public.proveedores(id),
 	CONSTRAINT pagos_proveedor_asiento_fkey FOREIGN KEY (asiento_id) REFERENCES public.asientos(id)
 );
+
+ALTER TABLE public.documentos_contables ADD CONSTRAINT fk_dc_pago
+	FOREIGN KEY (pago_id) REFERENCES public.pagos_proveedor(id) ON DELETE CASCADE;
 
 
 -- public.cierres_mensuales definition

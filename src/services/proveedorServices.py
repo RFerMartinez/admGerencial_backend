@@ -102,17 +102,17 @@ async def registrar_pago(conn: Connection, pago_data: PagoProveedorCreate) -> di
         """, renglones_contables)
 
         # 4. Registro en pagos_proveedor (tracking individual)
-        await conn.execute("""
+        pago_id = await conn.fetchval("""
             INSERT INTO pagos_proveedor (proveedor_id, fecha, monto, asiento_id)
-            VALUES ($1, $2, $3, $4);
+            VALUES ($1, $2, $3, $4) RETURNING id;
         """, pago_data.proveedor_id, pago_data.fecha, pago_data.monto_pagado, asiento_id)
 
-        # 5. Registro documental
+        # 5. Registro documental (vinculado al pago para trazabilidad completa)
         await conn.execute("""
             INSERT INTO documentos_contables (
                 tipo_operacion, fecha_emision, tipo_comprobante, nro_comprobante,
-                entidad_nombre, total, comprobante_padre_id
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7);
+                entidad_nombre, total, comprobante_padre_id, pago_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
         """,
             'Pago',
             pago_data.fecha,
@@ -120,7 +120,8 @@ async def registrar_pago(conn: Connection, pago_data: PagoProveedorCreate) -> di
             pago_data.nro_comprobante_recibido,
             prov['nombre'],
             pago_data.monto_pagado,
-            pago_data.comprobante_padre_id
+            pago_data.comprobante_padre_id,
+            pago_id
         )
 
         return {"asiento_id": asiento_id}

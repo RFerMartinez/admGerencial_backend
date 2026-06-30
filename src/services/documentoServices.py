@@ -2,7 +2,7 @@
 import random
 from asyncpg import Connection
 from schemas.documentoSchema import NotaVentaCreate, NotaCompraCreate
-from utils.exceptions import NotFoundException, DatabaseException
+from utils.exceptions import NotFoundException, DatabaseException, BadRequestException
 from services.cuentaSistemaServices import resolver_cuentas_sistema
 
 
@@ -43,6 +43,12 @@ async def obtener_documentos(conn: Connection) -> list[dict]:
             cg.codigo as gasto_cuenta_codigo,
             -- Proveedor (maestro)
             prov.nombre as proveedor_nombre,
+            prov.cuit as proveedor_cuit,
+            -- Datos del pago (tracking individual + asiento)
+            pago.monto as pago_monto,
+            pago.asiento_id as pago_asiento_id,
+            pago_asiento.descripcion as pago_observaciones,
+            pago_metodo.rol as pago_metodo_rol,
             -- Notas hijas
             (SELECT COUNT(*) FROM documentos_contables hijo WHERE hijo.comprobante_padre_id = dc.id) as cantidad_notas,
             -- Documento padre (para notas)
@@ -68,7 +74,15 @@ async def obtener_documentos(conn: Connection) -> list[dict]:
         LEFT JOIN gastos g ON dc.gasto_id = g.id
         LEFT JOIN cuentas cg ON g.cuenta_debe_id = cg.id
         LEFT JOIN compras_mercaderia cm ON dc.compra_id = cm.id
-        LEFT JOIN proveedores prov ON cm.proveedor_id = prov.id OR g.proveedor_id = prov.id
+        LEFT JOIN pagos_proveedor pago ON dc.pago_id = pago.id
+        LEFT JOIN proveedores prov ON cm.proveedor_id = prov.id OR g.proveedor_id = prov.id OR pago.proveedor_id = prov.id
+        LEFT JOIN asientos pago_asiento ON pago.asiento_id = pago_asiento.id
+        LEFT JOIN LATERAL (
+            SELECT cs.rol FROM asientos_detalle ad
+            JOIN cuentas_sistema cs ON cs.cuenta_id = ad.cuenta_id AND cs.rol IN ('CAJA', 'BANCO')
+            WHERE ad.asiento_id = pago.asiento_id
+            LIMIT 1
+        ) pago_metodo ON pago.asiento_id IS NOT NULL
         LEFT JOIN documentos_contables padre ON dc.comprobante_padre_id = padre.id
         LEFT JOIN LATERAL (
             SELECT a.descripcion FROM asientos a
@@ -101,6 +115,16 @@ async def obtener_documentos(conn: Connection) -> list[dict]:
             }
             if row['proveedor_nombre']:
                 doc["proveedor_nombre"] = row['proveedor_nombre']
+                doc["proveedor_cuit"] = row['proveedor_cuit']
+            if row['tipo_operacion'] == 'Pago' and row['pago_asiento_id'] is not None:
+                doc["pago_monto"] = float(row['pago_monto']) if row['pago_monto'] is not None else None
+                doc["pago_asiento_id"] = row['pago_asiento_id']
+                doc["pago_observaciones"] = row['pago_observaciones']
+                doc["pago_metodo_pago"] = (
+                    'Efectivo' if row['pago_metodo_rol'] == 'CAJA'
+                    else 'Transferencia' if row['pago_metodo_rol'] == 'BANCO'
+                    else None
+                )
             if row['gasto_descripcion']:
                 doc["gasto_descripcion"] = row['gasto_descripcion']
                 doc["gasto_cuenta_nombre"] = row['gasto_cuenta_nombre']
@@ -141,6 +165,88 @@ async def obtener_documentos(conn: Connection) -> list[dict]:
             })
 
     return list(documentos_agrupados.values())
+
+
+CODIGOS_AFIP_NOTA = {
+    ('Nota de Crédito', 'A'): '03',
+    ('Nota de Crédito', 'B'): '08',
+    ('Nota de Débito', 'A'): '02',
+    ('Nota de Débito', 'B'): '07',
+}
+
+
+async def obtener_nota_para_imprimir(conn: Connection, doc_id: int) -> dict:
+    row = await conn.fetchrow("""
+        SELECT
+            dc.id, dc.tipo_comprobante, dc.nro_comprobante, dc.fecha_emision, dc.total,
+            dc.comprobante_padre_id,
+            padre.tipo_comprobante AS padre_tipo_comprobante,
+            padre.nro_comprobante AS padre_nro_comprobante,
+            padre.fecha_emision AS padre_fecha_emision,
+            padre.total AS padre_total,
+            padre.cliente_proveedor_nombre AS cliente_nombre,
+            padre.cliente_proveedor_identificacion AS cliente_identificacion,
+            padre.condicion_iva AS cliente_condicion_iva,
+            padre.venta_id AS padre_venta_id,
+            nota_asiento.descripcion AS nota_asiento_descripcion
+        FROM documentos_contables dc
+        LEFT JOIN documentos_contables padre ON dc.comprobante_padre_id = padre.id
+        LEFT JOIN LATERAL (
+            SELECT a.descripcion FROM asientos a
+            WHERE a.fecha = dc.fecha_emision
+              AND a.descripcion LIKE '%Ref. Doc #' || dc.comprobante_padre_id::text || ':%'
+            ORDER BY a.id DESC LIMIT 1
+        ) nota_asiento ON dc.comprobante_padre_id IS NOT NULL
+        WHERE dc.id = $1;
+    """, doc_id)
+
+    if not row:
+        raise NotFoundException(detail=f"El documento con ID {doc_id} no existe.")
+
+    if row['comprobante_padre_id'] is None:
+        raise BadRequestException(detail="Este documento no es una nota de crédito/débito.")
+
+    if row['padre_venta_id'] is None:
+        raise BadRequestException(detail="Solo se pueden imprimir notas emitidas sobre una venta.")
+
+    tipo_comprobante = row['tipo_comprobante'] or ''
+    partes = tipo_comprobante.split(' ')
+    letra = partes[-1] if partes else 'B'
+    if letra not in ('A', 'B'):
+        letra = 'B'
+    es_credito = 'crédito' in tipo_comprobante.lower() or 'credito' in tipo_comprobante.lower()
+    tipo_nota_titulo = 'NOTA DE CRÉDITO' if es_credito else 'NOTA DE DÉBITO'
+    codigo_afip = CODIGOS_AFIP_NOTA.get((('Nota de Crédito' if es_credito else 'Nota de Débito'), letra), '00')
+
+    desc = row['nota_asiento_descripcion'] or ''
+    motivo = desc.split(': ', 1)[1] if ': ' in desc else ''
+
+    total = float(row['total'])
+    nota = {
+        'id': row['id'],
+        'tipo_comprobante': tipo_comprobante,
+        'tipo_nota_titulo': tipo_nota_titulo,
+        'letra': letra,
+        'codigo_afip': codigo_afip,
+        'nro_comprobante': row['nro_comprobante'],
+        'fecha_emision': str(row['fecha_emision']),
+        'total': total,
+        'motivo': motivo,
+        'padre_tipo_comprobante': row['padre_tipo_comprobante'],
+        'padre_nro_comprobante': row['padre_nro_comprobante'],
+        'padre_fecha_emision': str(row['padre_fecha_emision']) if row['padre_fecha_emision'] else None,
+        'padre_total': float(row['padre_total']) if row['padre_total'] is not None else 0.0,
+        'cliente_nombre': row['cliente_nombre'],
+        'cliente_identificacion': row['cliente_identificacion'],
+        'cliente_condicion_iva': row['cliente_condicion_iva'],
+    }
+
+    if letra == 'A':
+        neto = round(total / 1.21, 2)
+        nota['subtotal_neto'] = neto
+        nota['iva_21'] = round(total - neto, 2)
+
+    return nota
 
 
 async def procesar_nota_venta(conn: Connection, nota_data: NotaVentaCreate) -> dict:

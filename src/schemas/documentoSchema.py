@@ -36,11 +36,16 @@ class DocumentoListResponse(BaseModel):
     cantidad_notas: int = 0
     items_originales: List[ItemOriginal] = []
     proveedor_nombre: Optional[str] = None
+    proveedor_cuit: Optional[str] = None
     gasto_descripcion: Optional[str] = None
     gasto_cuenta_nombre: Optional[str] = None
     gasto_cuenta_codigo: Optional[str] = None
     padre_info: Optional[PadreInfo] = None
     nota_motivo: Optional[str] = None
+    pago_monto: Optional[float] = None
+    pago_asiento_id: Optional[int] = None
+    pago_observaciones: Optional[str] = None
+    pago_metodo_pago: Optional[str] = None
 
 
 # --- POST: Notas de Crédito / Débito ---

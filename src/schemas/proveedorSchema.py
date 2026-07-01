@@ -1,7 +1,7 @@
 # src/schemas/proveedorSchema.py
 from pydantic import BaseModel, Field, ConfigDict
 from typing import Literal, Optional
-from datetime import datetime, date
+from datetime import date
 
 
 class DeudaProveedorResponse(BaseModel):
@@ -17,7 +17,7 @@ MetodoPago = Literal["Efectivo", "Transferencia"]
 
 
 class PagoProveedorCreate(BaseModel):
-    fecha: datetime = Field(...)
+    fecha: date = Field(..., description="Fecha del pago (fecha local del usuario)")
     proveedor_id: int = Field(..., gt=0)
     monto_pagado: float = Field(..., gt=0)
     metodo_pago: MetodoPago = Field(...)

@@ -38,10 +38,13 @@ async def registrar_gasto(conn: Connection, gasto_data: GastoCreate) -> dict:
             cuenta_haber_id = config[rol]
 
         # 3. Asiento contable
+        # Se usa la fecha ingresada por el usuario (no datetime.now()) para que el asiento
+        # quede en el mismo día que el gasto, sin importar la zona horaria del servidor.
         descripcion = f"Gasto s/ {gasto_data.tipo_comprobante} {gasto_data.nro_comprobante} - {gasto_data.descripcion}"
+        fecha_asiento = datetime.combine(gasto_data.fecha, datetime.now().time())
         asiento_id = await conn.fetchval(
             "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;",
-            datetime.now(), descripcion
+            fecha_asiento, descripcion
         )
 
         # 4. Registro operativo

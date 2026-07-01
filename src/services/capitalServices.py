@@ -18,9 +18,11 @@ async def registrar_capital_inicial(conn: Connection, capital_data: CapitalInici
 
             config = await resolver_cuentas_sistema(conn, ['CAJA', 'BANCO', 'CAPITAL'])
 
+            # Se usa la fecha ingresada por el usuario, no datetime.now().
+            fecha_asiento = datetime.combine(capital_data.fecha, datetime.now().time())
             asiento_id = await conn.fetchval(
                 "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;",
-                datetime.now(), "Por inicio de actividades"
+                fecha_asiento, "Por inicio de actividades"
             )
 
             renglones_contables = [

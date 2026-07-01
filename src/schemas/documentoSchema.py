@@ -63,6 +63,7 @@ class NotaVentaCreate(BaseModel):
     motivo: str
     total_modificado: float = Field(..., gt=0)
     items_afectados: List[ItemAfectado] = []
+    fecha: date = Field(..., description="Fecha de emisión de la nota (fecha local del usuario)")
 
 
 class NotaCompraCreate(BaseModel):
@@ -72,6 +73,7 @@ class NotaCompraCreate(BaseModel):
     motivo: str
     total_modificado: float = Field(..., gt=0)
     items_afectados: List[ItemAfectado] = []
+    fecha: date = Field(..., description="Fecha de emisión de la nota (fecha local del usuario)")
 
 
 class NotaResponse(BaseModel):

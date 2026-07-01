@@ -12,7 +12,7 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
     # Bloque Transaccional ACID
     async with conn.transaction():
 
-        await validar_periodo_abierto(conn, venta_data.fecha.date())
+        await validar_periodo_abierto(conn, venta_data.fecha)
 
         # --- PREPARACIÓN Y VALIDACIÓN ---
         costo_total_venta = 0.0
@@ -45,10 +45,13 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
         config = await resolver_cuentas_sistema(conn, [rol_cobro, 'VENTAS', 'CMV', 'MERCADERIAS'])
 
         # --- PASO 1: ASIENTO CONTABLE (Cabecera) ---
+        # Se combina la fecha ingresada por el usuario con la hora actual del servidor,
+        # para no depender de datetime.now() para la fecha (evita el corrimiento de día
+        # por zona horaria) pero conservando un orden cronológico dentro del mismo día.
         query_asiento = "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;"
         descripcion_asiento = f"Venta s/ {venta_data.tipo_comprobante} - {venta_data.metodo_pago.capitalize()}"
-        fecha_naive = venta_data.fecha.replace(tzinfo=None) if venta_data.fecha.tzinfo else venta_data.fecha
-        asiento_id = await conn.fetchval(query_asiento, fecha_naive, descripcion_asiento)
+        fecha_asiento = datetime.combine(venta_data.fecha, datetime.now().time())
+        asiento_id = await conn.fetchval(query_asiento, fecha_asiento, descripcion_asiento)
 
         # --- PASO 2: REGISTRO OPERATIVO Y DOCUMENTAL ---
         
@@ -92,7 +95,7 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
         """
         venta_id = await conn.fetchval(
             query_venta, 
-            venta_data.fecha.date(), 
+            venta_data.fecha, 
             venta_data.total, 
             asiento_id
         )
@@ -111,7 +114,7 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
             query_documento,
             venta_data.tipo_comprobante,
             nro_comprobante,
-            venta_data.fecha.date(),
+            venta_data.fecha,
             venta_data.total,
             cliente_nom,
             cuit_final,  # Usamos cuit_final también en cliente_proveedor_identificacion para retrocompatibilidad
@@ -148,7 +151,7 @@ async def procesar_venta(conn: Connection, venta_data: VentaCreate) -> dict:
 
         return {
             "id": venta_id,
-            "fecha": venta_data.fecha.date(),
+            "fecha": venta_data.fecha,
             "total": venta_data.total,
             "asiento_id": asiento_id,
             "tipo_comprobante": venta_data.tipo_comprobante,

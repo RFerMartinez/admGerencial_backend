@@ -48,10 +48,13 @@ async def procesar_compra(conn: Connection, compra_data: CompraCreate) -> dict:
         cuenta_debe_id = config['MERCADERIAS']
 
         # --- PASO 1: ASIENTO CONTABLE ---
+        # Se usa la fecha ingresada por el usuario (no datetime.now()) para que el asiento
+        # quede en el mismo día que la compra, sin importar la zona horaria del servidor.
         descripcion_asiento = f"Compra s/ {compra_data.tipo_comprobante} {compra_data.nro_comprobante}"
+        fecha_asiento = datetime.combine(compra_data.fecha, datetime.now().time())
         asiento_id = await conn.fetchval(
             "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;",
-            datetime.now(), descripcion_asiento
+            fecha_asiento, descripcion_asiento
         )
 
         # --- PASO 2: REGISTRO OPERATIVO Y DOCUMENTAL ---

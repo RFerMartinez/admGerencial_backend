@@ -262,6 +262,7 @@ CREATE TABLE public.documentos_contables (
 	cliente_cuit varchar(20) NULL,
 	gasto_id int4 NULL,
 	pago_id int4 NULL,
+	motivo_nota varchar(255) NULL,
 	CONSTRAINT documentos_contables_pkey PRIMARY KEY (id),
 	CONSTRAINT documentos_contables_cliente_cuit_fkey FOREIGN KEY (cliente_cuit) REFERENCES public.clientes(cuit),
 	CONSTRAINT fk_dc_compra FOREIGN KEY (compra_id) REFERENCES public.compras_mercaderia(id) ON DELETE CASCADE,

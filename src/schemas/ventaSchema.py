@@ -1,7 +1,6 @@
 # src/schemas/ventaSchema.py
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Literal, Optional
-from datetime import datetime
 from datetime import date as dt_date
 
 TipoMetodoPago = Literal["Efectivo", "Transferencia"]
@@ -27,7 +26,7 @@ class VentaItem(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
 class VentaCreate(BaseModel):
-    fecha: datetime = Field(..., description="Fecha y hora de la transacción")
+    fecha: dt_date = Field(..., description="Fecha de la transacción (fecha local del punto de venta)")
     tipo_comprobante: TipoComprobante = Field(..., description="Tipo de comprobante emitido")
     metodo_pago: TipoMetodoPago = Field(..., alias="metodoPago", description="Forma de pago recibida")
     monto_recibido: float = Field(..., alias="montoRecibido", ge=0, description="Dinero entregado por el comprador")

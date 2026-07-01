@@ -1,5 +1,6 @@
 # src/services/documentoServices.py
 import random
+from datetime import datetime
 from asyncpg import Connection
 from schemas.documentoSchema import NotaVentaCreate, NotaCompraCreate
 from utils.exceptions import NotFoundException, DatabaseException, BadRequestException
@@ -64,8 +65,7 @@ async def obtener_documentos(conn: Connection) -> list[dict]:
                     ELSE ''
                 END
             ) as padre_tipo_operacion,
-            -- Asiento de la nota (descripción contiene el motivo)
-            nota_asiento.descripcion as nota_asiento_descripcion
+            dc.motivo_nota
         FROM documentos_contables dc
         LEFT JOIN ventas_detalle vd ON dc.venta_id = vd.venta_id
         LEFT JOIN producto pv ON pv.id = vd.producto_id
@@ -84,12 +84,6 @@ async def obtener_documentos(conn: Connection) -> list[dict]:
             LIMIT 1
         ) pago_metodo ON pago.asiento_id IS NOT NULL
         LEFT JOIN documentos_contables padre ON dc.comprobante_padre_id = padre.id
-        LEFT JOIN LATERAL (
-            SELECT a.descripcion FROM asientos a
-            WHERE a.fecha = dc.fecha_emision
-              AND a.descripcion LIKE '%Ref. Doc #' || dc.comprobante_padre_id::text || ':%'
-            ORDER BY a.id DESC LIMIT 1
-        ) nota_asiento ON dc.comprobante_padre_id IS NOT NULL
         ORDER BY dc.fecha_emision DESC, dc.id DESC;
     """
     records = await conn.fetch(query)
@@ -138,12 +132,7 @@ async def obtener_documentos(conn: Connection) -> list[dict]:
                     "entidad": row['padre_entidad'],
                     "tipo_operacion": row['padre_tipo_operacion'],
                 }
-                # Extraer motivo del asiento
-                desc = row['nota_asiento_descripcion'] or ''
-                motivo = ''
-                if ': ' in desc:
-                    motivo = desc.split(': ', 1)[1]
-                doc["nota_motivo"] = motivo
+                doc["nota_motivo"] = row['motivo_nota'] or ''
             documentos_agrupados[doc_id] = doc
 
         items = documentos_agrupados[doc_id]["items_originales"]
@@ -188,15 +177,9 @@ async def obtener_nota_para_imprimir(conn: Connection, doc_id: int) -> dict:
             padre.cliente_proveedor_identificacion AS cliente_identificacion,
             padre.condicion_iva AS cliente_condicion_iva,
             padre.venta_id AS padre_venta_id,
-            nota_asiento.descripcion AS nota_asiento_descripcion
+            dc.motivo_nota
         FROM documentos_contables dc
         LEFT JOIN documentos_contables padre ON dc.comprobante_padre_id = padre.id
-        LEFT JOIN LATERAL (
-            SELECT a.descripcion FROM asientos a
-            WHERE a.fecha = dc.fecha_emision
-              AND a.descripcion LIKE '%Ref. Doc #' || dc.comprobante_padre_id::text || ':%'
-            ORDER BY a.id DESC LIMIT 1
-        ) nota_asiento ON dc.comprobante_padre_id IS NOT NULL
         WHERE dc.id = $1;
     """, doc_id)
 
@@ -218,8 +201,7 @@ async def obtener_nota_para_imprimir(conn: Connection, doc_id: int) -> dict:
     tipo_nota_titulo = 'NOTA DE CRÉDITO' if es_credito else 'NOTA DE DÉBITO'
     codigo_afip = CODIGOS_AFIP_NOTA.get((('Nota de Crédito' if es_credito else 'Nota de Débito'), letra), '00')
 
-    desc = row['nota_asiento_descripcion'] or ''
-    motivo = desc.split(': ', 1)[1] if ': ' in desc else ''
+    motivo = row['motivo_nota'] or ''
 
     total = float(row['total'])
     nota = {
@@ -266,9 +248,9 @@ async def procesar_nota_venta(conn: Connection, nota_data: NotaVentaCreate) -> d
 
         doc_id = await conn.fetchval("""
             INSERT INTO documentos_contables (
-                tipo_operacion, tipo_comprobante, nro_comprobante, fecha_emision, total, comprobante_padre_id
-            ) VALUES ($1, $2, $3, CURRENT_DATE, $4, $5) RETURNING id;
-        """, 'Ajuste/Nota', nota_data.tipo_comprobante, nro_comprobante, nota_data.total_modificado, nota_data.comprobante_padre_id)
+                tipo_operacion, tipo_comprobante, nro_comprobante, fecha_emision, total, comprobante_padre_id, motivo_nota
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id;
+        """, 'Ajuste/Nota', nota_data.tipo_comprobante, nro_comprobante, nota_data.fecha, nota_data.total_modificado, nota_data.comprobante_padre_id, nota_data.motivo)
 
         costo_total_modificado = 0.0
         es_ajuste_fisico = False
@@ -303,9 +285,10 @@ async def procesar_nota_venta(conn: Connection, nota_data: NotaVentaCreate) -> d
         c_merca = cs['MERCADERIAS']
         c_cmv = cs['CMV']
 
+        fecha_asiento = datetime.combine(nota_data.fecha, datetime.now().time())
         asiento_id = await conn.fetchval(
-            "INSERT INTO asientos (fecha, descripcion) VALUES (NOW(), $1) RETURNING id;",
-            f"{nota_data.tipo_comprobante} - Ref. Doc #{nota_data.comprobante_padre_id}: {nota_data.motivo}"
+            "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;",
+            fecha_asiento, f"{nota_data.tipo_comprobante} - Ref. Doc #{nota_data.comprobante_padre_id}: {nota_data.motivo}"
         )
 
         renglones = []
@@ -354,9 +337,9 @@ async def procesar_nota_compra(conn: Connection, nota_data: NotaCompraCreate) ->
 
         doc_id = await conn.fetchval("""
             INSERT INTO documentos_contables (
-                tipo_operacion, tipo_comprobante, nro_comprobante, fecha_emision, total, comprobante_padre_id
-            ) VALUES ($1, $2, $3, CURRENT_DATE, $4, $5) RETURNING id;
-        """, 'Ajuste/Nota', nota_data.tipo_comprobante, nota_data.nro_comprobante_recibido, nota_data.total_modificado, nota_data.comprobante_padre_id)
+                tipo_operacion, tipo_comprobante, nro_comprobante, fecha_emision, total, comprobante_padre_id, motivo_nota
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id;
+        """, 'Ajuste/Nota', nota_data.tipo_comprobante, nota_data.nro_comprobante_recibido, nota_data.fecha, nota_data.total_modificado, nota_data.comprobante_padre_id, nota_data.motivo)
 
         for item in nota_data.items_afectados:
             if item.cantidad > 0:
@@ -381,9 +364,10 @@ async def procesar_nota_compra(conn: Connection, nota_data: NotaCompraCreate) ->
 
         c_merca = cs['MERCADERIAS']
 
+        fecha_asiento = datetime.combine(nota_data.fecha, datetime.now().time())
         asiento_id = await conn.fetchval(
-            "INSERT INTO asientos (fecha, descripcion) VALUES (NOW(), $1) RETURNING id;",
-            f"{nota_data.tipo_comprobante} - Ref. Doc #{nota_data.comprobante_padre_id}: {nota_data.motivo}"
+            "INSERT INTO asientos (fecha, descripcion) VALUES ($1, $2) RETURNING id;",
+            fecha_asiento, f"{nota_data.tipo_comprobante} - Ref. Doc #{nota_data.comprobante_padre_id}: {nota_data.motivo}"
         )
 
         renglones = []
